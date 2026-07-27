@@ -79,3 +79,15 @@ venv/
 # MkDocs documentation
 ## Ignore site directory.
 .site/
+
+# Build outputs and logs
+## Build manifests record the build account password in cleartext. Keep the directory, never the
+## manifests themselves.
+manifests/*.json
+
+## Exported OVF artifacts.
+artifacts/*
+!artifacts/.gitkeep
+
+## Packer logs contain credentials when PACKER_LOG is enabled.
+*.log
