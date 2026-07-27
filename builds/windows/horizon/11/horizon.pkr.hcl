@@ -463,15 +463,44 @@ build {
   }
 
   //  Agent stack: Horizon Agent, Dynamic Environment Manager, FSLogix, then App Volumes last.
+  //
+  //  Launched as a scheduled task rather than run inline. The Horizon Agent installs network
+  //  drivers and the guest can drop off the network while it does; an inline install dies with the
+  //  connection, failing the build with "no route to host" and leaving a half-installed agent.
+  //  Detached, the install belongs to the task scheduler and survives the outage.
   provisioner "powershell" {
     script           = "${path.cwd}/scripts/windows/horizon-agents.ps1"
     environment_vars = local.agent_env
+    execute_command  = "powershell -ExecutionPolicy Bypass -NoProfile -Command \"& { . {{.Vars}}; & '{{.Path}}' -Detached; exit $LastExitCode }\""
     valid_exit_codes = [0]
     only             = var.horizon_agents_enabled ? ["vsphere-iso.windows-horizon-instant", "vsphere-iso.windows-horizon-template"] : []
   }
 
-  provisioner "windows-restart" {
-    restart_timeout = "30m"
+  //  The detached install reboots the guest itself once it is finished, so there is nothing for a
+  //  windows-restart provisioner to do here -- and nothing for it to issue the restart over, since
+  //  the connection is gone by then. Instead the verification below retries until the guest is
+  //  back: pause_before covers the install, max_retries covers the reboot.
+
+  //  Report what the detached install actually did. Without this the build would sail past a
+  //  failed agent install, because the provisioner that launched it only reports the launch.
+  provisioner "powershell" {
+    pause_before = "5m"
+    max_retries  = 40
+    inline = [
+      "$ErrorActionPreference = 'Stop'",
+      "$log = 'C:\\Windows\\Temp\\horizon-agents'",
+      "$marker = Join-Path $log 'agent-stack.done'",
+      "if (-not (Test-Path $marker)) { throw \"The agent stack never completed: $marker is missing. See $log for per-installer logs.\" }",
+      "$code = (Get-Content $marker -Raw).Trim()",
+      "if (Test-Path (Join-Path $log 'agent-stack.log')) { Get-Content (Join-Path $log 'agent-stack.log') | Select-Object -Last 40 | ForEach-Object { Write-Host $_ } }",
+      "if ($code -ne '0') { throw \"The agent stack exited with code $code. See $log for per-installer logs.\" }",
+      "foreach ($svc in @('WSNM')) {",
+      "  if (Get-Service -Name $svc -ErrorAction SilentlyContinue) { Write-Host \"  service $svc present\" } else { throw \"Agent stack reported success but the $svc service is missing.\" }",
+      "}",
+      "Write-Host '  Agent stack verified.'"
+    ]
+    valid_exit_codes = [0]
+    only             = var.horizon_agents_enabled ? ["vsphere-iso.windows-horizon-instant", "vsphere-iso.windows-horizon-template"] : []
   }
 
   //  Remove the packages that Windows reprovisions and that block Sysprep. Done here rather than

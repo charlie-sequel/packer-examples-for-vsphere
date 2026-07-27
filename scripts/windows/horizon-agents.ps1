@@ -132,6 +132,14 @@ param(
     [string]$AnonymousUid,
     [string]$AnonymousGid,
 
+    # Run the agent stack from a scheduled task instead of inline, and return immediately.
+    #
+    # The Horizon Agent replaces network and VMware Tools components and needs a restart before
+    # either works again. An inline install loses the connection when they go down and the build
+    # fails with "no route to host". Detached, the install is owned by the task scheduler, survives
+    # the outage, publishes its exit code as a marker file, and then reboots the guest.
+    [switch]$Detached,
+
     # OS Optimization Tool staging. OSOT has to be on the guest before the first optimization
     # provisioner runs, and it lives on the same share as the agents, so the source-resolution
     # logic here is reused rather than duplicated into horizon-osot.ps1. With this switch the
@@ -147,6 +155,7 @@ $ErrorActionPreference = 'Stop'
 $script:MountedDrive = $null
 $script:Results = @()
 $script:SourceFileCache = $null
+$script:CopiedMedia = @()
 
 # Environment-variable fallbacks. The Packer provisioner supplies configuration this way rather
 # than on the command line: several of these values contain characters that do not survive a round
@@ -528,12 +537,57 @@ function Find-Installer {
     return $selected.FullName
 }
 
+# Copy an installer to local disk before running it. Installers are large -- the Horizon Agent
+# alone is over 250 MB -- and running one directly from a mounted share makes the share a
+# dependency for the whole install rather than just the copy, with a network blip surfacing as an
+# installer hang rather than a copy failure. Returns the local path, or the original on failure.
+function Copy-InstallerLocally {
+    param([string]$Path, [string]$Name)
+
+    try {
+        $staging = Join-Path $LogPath 'media'
+        if (-not (Test-Path $staging)) { New-Item -Path $staging -ItemType Directory -Force | Out-Null }
+        $local = Join-Path $staging (Split-Path $Path -Leaf)
+        $size = [Math]::Round((Get-Item -LiteralPath $Path).Length / 1MB, 1)
+        Write-Step "$Name -- copying $size MB locally before installing..." -Status RUN
+        Copy-Item -LiteralPath $Path -Destination $local -Force
+        $script:CopiedMedia += $local
+        return $local
+    }
+    catch {
+        Write-Step "$Name -- local copy failed ($($_.Exception.Message)); installing from the source." -Status WARN
+        return $Path
+    }
+}
+
 function Invoke-Installer {
-    param([string]$Name, [string]$FilePath, [string]$Arguments, [string]$LogFile)
+    param([string]$Name, [string]$FilePath, [string]$Arguments, [string]$LogFile, [int]$TimeoutMinutes = 45)
 
     Write-Step "$Name -- installing $(Split-Path $FilePath -Leaf)" -Status RUN
     try {
-        $process = Start-Process -FilePath $FilePath -ArgumentList $Arguments -Wait -PassThru -ErrorAction Stop
+        # Run through a .cmd wrapper rather than passing the arguments to Start-Process.
+        #
+        # The InstallShield form is  setup.exe /s /v"/qn PROP=1 /norestart"  -- the inner quotes are
+        # part of the /v argument and must survive verbatim. PowerShell re-quotes -ArgumentList on
+        # its way to CreateProcess and breaks them, so the installer sees a bare /v, prints its
+        # usage dialog, and exits 1814. cmd parses the line exactly as typed by hand. The file is
+        # left in place afterwards so the exact command line is visible when an install fails.
+        $safeName = ($Name -replace '[^\w]', '-')
+        $wrapper = Join-Path $LogPath "$safeName-install.cmd"
+        Set-Content -LiteralPath $wrapper -Encoding ASCII -Value @"
+@echo off
+"$FilePath" $Arguments
+exit /b %ERRORLEVEL%
+"@
+        $process = Start-Process -FilePath $env:ComSpec -ArgumentList '/c', "`"$wrapper`"" -PassThru -ErrorAction Stop
+        # A ceiling rather than an indefinite wait: an installer that never returns would otherwise
+        # hang the build with no output until Packer's own timeout, with nothing explaining why.
+        if (-not $process.WaitForExit($TimeoutMinutes * 60 * 1000)) {
+            Write-Step "$Name did not finish within $TimeoutMinutes minutes; killing it. Log: $LogFile" -Status FAIL
+            try { $process.Kill() } catch { }
+            Add-Result -Name $Name -Status 'Failed' -Detail "timed out after $TimeoutMinutes min"
+            return $false
+        }
         switch ($process.ExitCode) {
             0 {
                 Write-Step "$Name installed." -Status OK
@@ -544,6 +598,13 @@ function Invoke-Installer {
                 # Reboot required. Packer restarts between provisioners, so this is not a failure.
                 Write-Step "$Name installed; reboot required (3010)." -Status OK
                 Add-Result -Name $Name -Status 'Installed' -Detail 'exit 3010, reboot pending'
+                return $true
+            }
+            1641 {
+                # ERROR_SUCCESS_REBOOT_INITIATED: installed, and the installer started a restart of
+                # its own despite REBOOT=ReallySuppress. Success, but worth seeing in the log.
+                Write-Step "$Name installed; the installer initiated a restart (1641)." -Status OK
+                Add-Result -Name $Name -Status 'Installed' -Detail 'exit 1641, restart initiated'
                 return $true
             }
             default {
@@ -591,7 +652,16 @@ function Get-HorizonAgentArguments {
         Write-Step 'vCenter-managed agent; no Connection Server registration.' -Status Info
     }
 
-    return "/s /v`"/qn $($properties -join ' ') /norestart`""
+    # REBOOT=ReallySuppress, not /norestart.
+    #
+    # /norestart inside the /v string is rejected by the 2603 bootstrapper: it prints its usage
+    # dialog and exits 1814 without installing anything. Verified by bisecting the command line on
+    # a live guest -- /s /v"/qn" returns 0, /s /v"/qn ADDLOCAL=Core" installs, and the only form
+    # that fails is the one carrying /norestart. REBOOT=ReallySuppress is the MSI property that
+    # does the same job, and it keeps the restart under this script's control: the runner reboots
+    # after the completion marker is written, so the marker survives.
+    $properties += 'REBOOT=ReallySuppress'
+    return "/s /v`"/qn $($properties -join ' ')`""
 }
 
 function Get-DemArguments {
@@ -642,6 +712,60 @@ Write-Output "  Windows Build $([Environment]::OSVersion.Version.Build)"
 Write-Output ''
 
 if (-not (Test-Path $LogPath)) { New-Item -Path $LogPath -ItemType Directory -Force | Out-Null }
+
+# Hand the whole run to the task scheduler and return. See the -Detached parameter for why.
+if ($Detached) {
+    $runner   = Join-Path $LogPath 'run-agents.ps1'
+    $envFile  = Join-Path $LogPath 'env.ps1'
+    $selfCopy = Join-Path $LogPath 'horizon-agents.ps1'
+    $marker   = Join-Path $LogPath 'agent-stack.done'
+
+    Remove-Item -LiteralPath $marker -Force -ErrorAction SilentlyContinue
+    Copy-Item -LiteralPath $PSCommandPath -Destination $selfCopy -Force
+
+    # The task runs in a different session, so the configuration has to travel with it. This file
+    # holds share and Connection Server passwords, so the runner deletes it the moment it has been
+    # read, and again on the way out.
+    $lines = foreach ($item in Get-ChildItem env: | Where-Object { $_.Name -like 'HORIZON_*' }) {
+        "`$env:$($item.Name) = '$($item.Value -replace "'", "''")'"
+    }
+    Set-Content -LiteralPath $envFile -Value $lines -Encoding UTF8
+
+    Set-Content -LiteralPath $runner -Encoding UTF8 -Value @"
+`$ErrorActionPreference = 'Continue'
+. '$envFile'
+Remove-Item -LiteralPath '$envFile' -Force -ErrorAction SilentlyContinue
+try {
+    & '$selfCopy' *>&1 | Tee-Object -FilePath '$(Join-Path $LogPath "agent-stack.log")'
+    `$code = if (`$LASTEXITCODE -ne `$null) { `$LASTEXITCODE } else { 0 }
+}
+catch {
+    `$_ | Out-File -FilePath '$(Join-Path $LogPath "agent-stack.log")' -Append
+    `$code = 1
+}
+Remove-Item -LiteralPath '$envFile' -Force -ErrorAction SilentlyContinue
+Set-Content -LiteralPath '$marker' -Value `$code
+
+# Reboot from inside the guest, after the marker is written.
+#
+# The agent installer replaces the network stack and VMware Tools components and needs a restart
+# to reload them. Run with /norestart and neither comes back: the guest sits there with no
+# network and no Tools, which looks like a hang from outside. Packer cannot issue this restart
+# itself -- by the time the install finishes there is no connection left to issue it over -- so
+# the guest has to do it. The marker is written first so its presence survives the reboot.
+shutdown /r /f /t 15 /c "packer: agent stack complete"
+"@
+
+    $taskName = 'PackerHorizonAgentStack'
+    & schtasks.exe /create /tn $taskName /ru SYSTEM /rl HIGHEST /sc once /st 00:00 /f `
+        /tr "powershell.exe -ExecutionPolicy Bypass -NoProfile -File `"$runner`"" | Out-Null
+    & schtasks.exe /run /tn $taskName | Out-Null
+
+    Write-Step "Agent stack launched as scheduled task '$taskName'." -Status OK
+    Write-Step "Completion marker: $marker (contains the exit code)" -Status Info
+    Write-Step 'This provisioner returns now; the install continues even if the guest drops off the network.' -Status Info
+    return
+}
 
 # Staging OSOT is its own run: it happens before the optimization provisioner, which is before any
 # agent is installed. Handled ahead of the $Include check because staging does not select agents.
@@ -758,6 +882,8 @@ foreach ($agent in $catalogue) {
         continue
     }
 
+    $installer = Copy-InstallerLocally -Path $installer -Name $agent.Name
+
     $logFile = Join-Path $LogPath "$($agent.Key).log"
     $arguments = & $agent.Build $installer $logFile
 
@@ -772,6 +898,11 @@ foreach ($agent in $catalogue) {
 }
 
 Disconnect-InstallerSource
+
+# Staged installers are build scratch, not part of the image. Several hundred megabytes of them.
+foreach ($file in $script:CopiedMedia) {
+    Remove-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue
+}
 
 Write-Output ''
 Write-Output '  Summary'
