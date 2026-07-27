@@ -1,0 +1,281 @@
+# © Broadcom. All Rights Reserved.
+# The term "Broadcom" refers to Broadcom Inc. and/or its subsidiaries.
+# SPDX-License-Identifier: BSD-2-Clause
+
+/*
+    DESCRIPTION:
+    Omnissa Horizon golden image settings.
+
+    This is the single place to control how a Horizon template is built: which agents are
+    installed, where their installers come from, how each one is configured, and how the OS
+    Optimization Tool is run.
+
+    Copied to config/horizon.pkrvars.hcl by ./config.sh.
+*/
+
+// ---------------------------------------------------------------------------
+// What to install
+// ---------------------------------------------------------------------------
+// Installation order is fixed and does not depend on the order below:
+//   Horizon Agent -> Dynamic Environment Manager -> FSLogix -> App Volumes Agent (always last)
+// Each install is skipped when its service is already present, so re-running against a partially
+// built image is safe.
+
+horizon_install_agent      = true
+horizon_install_dem        = true
+horizon_install_fslogix    = true
+horizon_install_appvolumes = true
+
+// Run the OS Optimization Tool. Set false to build an agents-only image.
+horizon_osot_enabled = true
+
+// Install the agent stack. Set false to build an optimization-only image.
+horizon_agents_enabled = true
+
+// ---------------------------------------------------------------------------
+// Installer source
+// ---------------------------------------------------------------------------
+// Auto       Tries Datastore first (no credentials needed), then Smb, then Nfs.
+// Smb        horizon_agent_source_path is a UNC path.
+// Nfs        horizon_agent_source_path is host:/export/path. Enables the Windows NFS client
+//            in the image on demand, which the SMB path does not require.
+// Datastore  Scans attached CD/DVD drives for an ISO containing the installers.
+
+horizon_agent_source_type = "Auto"
+
+// SMB example: "\\\\fileserver.example.com\\software\\omnissa"
+// NFS example: "fileserver.example.com:/volume1/software/omnissa"
+horizon_agent_source_path     = ""
+horizon_agent_source_username = ""
+
+// NFS only. The Windows NFS client mounts with -o anon and presents UID -2 (4294967294) by
+// default -- not the Linux nobody (65534). An export whose files are owned by a specific UID
+// rejects that, and the symptom is misleading: the mount succeeds and the tree then reads as
+// "Access to the path 'Z:\' is denied" with zero files enumerated.
+//
+// Set these to a UID/GID that can read the export. Check with `ls -ln` on the share: the owning
+// UID is the safe choice. Leave empty to keep the client default.
+horizon_agent_source_anon_uid = ""
+horizon_agent_source_anon_gid = ""
+
+// Leave empty and export PKR_VAR_horizon_agent_source_password instead, so the credential stays
+// out of this file. It reaches the guest as an environment variable, never on a command line.
+horizon_agent_source_password = ""
+
+// ---------------------------------------------------------------------------
+// Horizon Agent
+// ---------------------------------------------------------------------------
+
+// Maps to VDM_VC_MANAGED_AGENT.
+//   true   Image is consumed by automated pools managed by vCenter Server. No Connection Server
+//          registration happens at install time and the settings below are unused.
+//   false  Unmanaged or manual pools. The machine registers with the Connection Server during
+//          installation, which requires all three settings below.
+horizon_agent_vc_managed = true
+
+horizon_connection_server          = ""
+horizon_connection_server_username = ""
+
+// Leave empty and export PKR_VAR_horizon_connection_server_password instead. The value is handed
+// to the guest as an environment variable and only assembled onto the installer command line
+// inside the guest, so it does not appear in the Packer log.
+horizon_connection_server_password = ""
+
+// Maps to ADDLOCAL. Feature names below are the complete set read out of the Feature table of
+// Omnissa-Horizon-Agent-x86_64-2603-8.18.0 (ProductVersion 8.18.0). Names are case sensitive and
+// an unrecognized name aborts the installation, so verify against your own agent build if you
+// upgrade. "Default" is relative to the installer's INSTALLLEVEL of 100: a feature installs
+// without being named here when its MSI level is 100 or lower.
+//
+// Core is mandatory whenever ADDLOCAL is used at all. Naming any feature switches the installer
+// out of its default selection, so list every feature you want, not just the extras.
+//
+//   ON BY DEFAULT (name them anyway if you use ADDLOCAL)
+//     Core                    Required. Horizon Agent core.
+//     ClientDriveRedirection  Client Drive Redirection.
+//     HznVaudio               Horizon Audio.
+//     NGVC                    Instant Clone Agent. Required for instant-clone pools.
+//     RDP                     Enables RDP. Hidden in the interactive installer.
+//     HelpDesk                Help Desk Plugin for Horizon Agent.
+//     PrintRedir              Horizon Integrated Printing.
+//     RTAV                    Real-Time Audio-Video (webcam and microphone).
+//     StorageDriveRedir       Storage Drive Redirection.
+//     TSMMR                   Windows Media multimedia redirection.
+//
+//   OFF BY DEFAULT (MSI level 1000)
+//     USB                     USB Redirection.
+//     SmartCard               Smartcard Redirection.
+//
+//   OFF BY DEFAULT (MSI level 32001)
+//     GEOREDIR                Geolocation Redirection.
+//     HybridLogon             Hybrid Logon.
+//     PerfTracker             Horizon Performance Tracker.
+//     RDSH3D                  3D RDSH.
+//     ScannerRedirection      Scanner Redirection.
+//     SdoSensor               SDO Sensor Redirection.
+//     SerialPortRedirection   Serial Port Redirection.
+//
+//   CHILDREN OF Core -- installed with Core, not selected individually
+//     BellsoftJDK, BlastUDP, FIDO2Redirection, HznVdisplay, HznVidd, HznVidd2, PSG,
+//     SmartCardSingleUserTS, UNCRedirection (UNC Path Redirection),
+//     URLRedirection (URL Content Redirection)
+//
+// ADDLOCAL=ALL installs everything above, including the off-by-default features.
+horizon_agent_features = "Core,USB,ClientDriveRedirection,PrintRedir,NGVC"
+
+// ---------------------------------------------------------------------------
+// Dynamic Environment Manager
+// ---------------------------------------------------------------------------
+
+// Maps to ADDLOCAL. Read out of the Feature table of Omnissa Dynamic Environment Manager
+// Enterprise 2603 10.19 (ProductVersion 10.19.0.2389). The MSI defines no INSTALLLEVEL, so the
+// default is 1: features at level 1 install by default, the Management Console at level 100 does
+// not. Naming any feature replaces the default selection.
+//
+//     FlexEngine                Agent. This is the one a golden image needs.        level 1
+//     FlexMigrate               Application Migration. Child of FlexEngine.         level 1
+//     FlexProfilesSelfSupport   Self-Support. Child of FlexEngine.                  level 1
+//     FlexManagementConsole     Management Console. Admin workstations, not images. level 100
+//
+// Child features are not pulled in automatically by naming the parent -- list them explicitly if
+// you want them.
+horizon_dem_features = "FlexEngine"
+
+// Maps to COMPENVCONFIGFILEPATH. Setting this enables computer environment settings support,
+// which is what applies computer based policies. Requires DEM Agent 2103 or later; earlier
+// agents configure the equivalent through registry values instead.
+// Example: "\\\\fileserver.example.com\\DEMConfig\\general"
+horizon_dem_config_share = ""
+
+// Maps to LICENSEFILE.
+//
+// NOTE: LICENSEFILE does not exist in DEM 10.19 -- it appears nowhere in that MSI's Property,
+// CustomAction, or Registry tables, so passing it is accepted by msiexec and silently does
+// nothing. 10.19 reads its license from the configuration share instead
+// (HKLM\SOFTWARE\Immidio "License File" -> FlexRepository\AgentConfiguration\License.xml).
+// The setting is kept because older DEM agents did honor it. On 10.19, put the .lic on the
+// configuration share rather than relying on this.
+// Example: "\\\\fileserver.example.com\\DEMConfig\\Omnissa DEM.lic"
+horizon_dem_license_file = ""
+
+// Additional msiexec properties appended verbatim to the DEM command line. The properties DEM
+// 10.19 actually reads from the command line, taken from its CustomAction table:
+//
+//     COMPENVCONFIGFILEPATH          Computer environment configuration path. Set by
+//                                    horizon_dem_config_share above -- do not duplicate it here.
+//     COMPENVMAXCONFIGFILEPATHWAIT   Seconds to wait for that path to become available at boot.
+//     NOADCONFIGFILEPATH             Suppress the Active Directory based configuration path.
+//     INTEGRATION_ENABLED            Workspace ONE integration.
+//     WSONE_UEM_PE_MODE              Workspace ONE UEM profile engine mode.
+horizon_dem_args = ""
+
+// ---------------------------------------------------------------------------
+// FSLogix
+// ---------------------------------------------------------------------------
+
+// FSLogix is a bundle, not an MSI, so there is no ADDLOCAL and no properties -- only these
+// switches, per Microsoft's installation documentation:
+//
+//     /install     Default product installation.
+//     /repair      Repair a previous installation.
+//     /uninstall   Uninstall a previous installation.
+//     /layout      Create a local copy of the install bundle.
+//     /passive     Minimal UI, no prompts.
+//     /quiet       No UI, no prompts.
+//     /norestart   Suppress restart attempts.
+//     /log <file>  Log to a specific path. Defaults to %TEMP%.
+//
+// Everything else about FSLogix is configured through the registry or Group Policy, which is why
+// horizon_fslogix_profile_path below writes the profile settings directly.
+horizon_fslogix_args = "/install /quiet /norestart"
+
+// When set, the image is configured with Profiles\Enabled = 1 and Profiles\VHDLocations.
+// Leave empty when Group Policy supplies these settings instead.
+// Example: "\\\\fileserver.example.com\\Profiles"
+horizon_fslogix_profile_path = ""
+
+// ---------------------------------------------------------------------------
+// App Volumes
+// ---------------------------------------------------------------------------
+
+// The App Volumes Agent is skipped when the manager is empty, even if
+// horizon_install_appvolumes is true.
+//
+// App Volumes Agent 4.21.2 (ProductVersion 4.21.2.6126) has exactly one feature, "Agent", so
+// there is no ADDLOCAL choice to make. It is configured through MSI properties instead, which the
+// build sets for you: MANAGER_ADDR, MANAGER_PORT, and ENFORCESSLCERTIFICATEVALIDATION=0.
+//
+// Other properties that agent accepts, from its AdminProperties list, should you need them via a
+// future setting: COMMUNICATIONTYPE, DIRECT / DIRECTMODE, NONPERSISTENT, PACKAGEMODELOCAL,
+// LICENSEKEY, REGISTRYLOGLEVEL, REGISTRYENABLEPIILOGGING, AGENTDIR, INSTALLDIR.
+//
+// Note the spelling trap: the registry value is EnforceSSLCertificateValidation but the MSI
+// property is ENFORCESSLCERTIFICATEVALIDATION. Only uppercase properties are public, so the
+// mixed-case spelling on a command line is ignored and validation stays enabled.
+horizon_appvolumes_manager = ""
+horizon_appvolumes_port    = 443
+
+// ---------------------------------------------------------------------------
+// Installer discovery
+// ---------------------------------------------------------------------------
+// Installers are located by pattern, not by exact version, and the highest file version wins.
+// Dropping a newer agent build onto the share is picked up with no change here. Override only
+// if your naming differs from the vendor defaults.
+
+horizon_agent_pattern      = "*Horizon-Agent-x86_64*.exe"
+horizon_dem_pattern        = "*Dynamic*Environment*Manager*.msi"
+horizon_fslogix_pattern    = "FSLogixAppsSetup.exe"
+horizon_appvolumes_pattern = "*App*Volumes*Agent*.msi"
+
+// ---------------------------------------------------------------------------
+// OS Optimization Tool
+// ---------------------------------------------------------------------------
+
+horizon_osot_path               = "C:\\Tools\\OSOT"
+horizon_osot_optimization_level = "recommended"
+
+// Stage OSOT from the installer source before optimizing. Set false when OSOT is already baked
+// into the image, or when a wrapper script stages it. The pattern matches both VMware- and
+// Omnissa-branded releases; the highest file version wins.
+horizon_osot_stage_from_source = true
+horizon_osot_pattern           = "*OSOptimizationTool*.exe"
+
+
+// Optimization template passed as -t. Leave empty for the tool's default.
+horizon_osot_template = ""
+
+// Comma-separated OSOT finalize step numbers.
+//
+// Do NOT set this to "all". The full finalize set includes a step that releases the IP address.
+// Under Packer that severs Windows Remote Management and the build stalls at the connection
+// timeout with no output explaining why. The default covers the two documented steps:
+//   0  Native Image Generator (NGEN) .NET precompile
+//   1  DISM side-by-side component cleanup
+horizon_osot_finalize_steps = "0,1"
+
+// Optional site-supplied OSOT wrapper, invoked as
+// -Action <Optimize|Finalize|Generalize> -OSOTPath <path> -NonInteractive.
+// When set it takes over from the built-in OSOT invocation.
+// Example: "C:\\Windows\\Temp\\Invoke-HorizonOSOT.ps1"
+horizon_osot_wrapper_script = ""
+
+// ---------------------------------------------------------------------------
+// Virtual hardware for multi-monitor sessions
+// ---------------------------------------------------------------------------
+
+// NOTE THE UNIT: vm_video_ram is in KB, not MB. 128 MB is 131072 KB. The project default of
+// 4096 is 4 MB, not 4 GB.
+//
+// These are the generic vm_* variables rather than horizon_* ones, so they are set here only
+// because this file is loaded exclusively for Horizon builds. build.sh loads
+// windows-horizon-11.pkrvars.hcl after this file, so a value set there would take precedence.
+vm_video_displays = 4
+vm_video_ram      = 131072
+
+// ---------------------------------------------------------------------------
+// Image type
+// ---------------------------------------------------------------------------
+
+// Snapshot name on the instant-clone golden image. Horizon desktop pools point at this snapshot.
+// Applies to the windows-horizon-instant source only.
+horizon_snapshot_name = "horizon-golden-image"

@@ -527,7 +527,7 @@ select_distribution() {
 # This function selects the version based on the guest operating system's distribution or type.
 select_version() {
 
-    if [[ "$dist" == *"Windows"* ]]; then
+    if [[ "$os" == *"Windows"* ]]; then
         # Parse the JSON file to get the versions for the selected distribution Windows
         version_descriptions=$(jq -r --arg os "$os" --arg dist "$dist" '.os[] | select(.name == $os) | .types[] | select(.description == $dist) | .versions | to_entries[] | select(.value[] | .enabled == "true") | .key' "$json_path")
     else
@@ -547,7 +547,7 @@ select_version() {
             exit 1
         fi
         echo -e "\033[0;32m✔ Selected version:\033[0m $version"
-        if [[ "$dist" == *"Windows"* ]]; then
+        if [[ "$os" == *"Windows"* ]]; then
             select_edition
         else
             select_build
@@ -574,7 +574,7 @@ select_version() {
             break
         elif [[ $version_input =~ ^[0-9]+$ ]] && ((version_input >= 1 && version_input <= ${#version_array[@]})); then
             version=${version_array[$((version_input - 1))]}
-            if [[ "$dist" == *"Windows"* ]]; then
+            if [[ "$os" == *"Windows"* ]]; then
                 select_edition
             else
                 select_build
@@ -647,6 +647,8 @@ select_build() {
         dist_name="server"
     elif [[ "$dist" == *"Windows Desktop"* ]]; then
         dist_name="desktop"
+    elif [[ "$dist" == *"Horizon"* ]]; then
+        dist_name="horizon"
 
     else
         dist_name_split="${dist%% *}"
@@ -735,32 +737,38 @@ select_build() {
     if [[ "$os" == *"Linux"* ]]; then
         vsphere_vars=$(jq -r --arg os "$os" --arg dist "$dist" --arg version "$version" '.os[] | select(.name == $os) | .distributions[] | select(.description == $dist) | .versions | to_entries[] | .value[] | select(.version == $version) | .build_files[0].vsphere' "$json_path")
 
-    elif [[ "$dist" == *"Windows"* ]]; then
+    elif [[ "$os" == *"Windows"* ]]; then
         vsphere_vars=$(jq -r --arg os "$os" --arg dist "$dist" --arg version "$version" --arg edition "$edition" '.os[] | select(.name == $os) | .types[] | select(.description == $dist) | .versions[$version][] | .editions[] | select(.edition == $edition) | .build_files[0].vsphere' "$json_path")
     fi
 
     if [[ "$os" == *"Linux"* ]]; then
         build_vars=$(jq -r --arg os "$os" --arg dist "$dist" --arg version "$version" '.os[] | select(.name == $os) | .distributions[] | select(.description == $dist) | .versions | to_entries[] | .value[] | select(.version == $version) | .build_files[0].build' "$json_path")
-    elif [[ "$dist" == *"Windows"* ]]; then
+    elif [[ "$os" == *"Windows"* ]]; then
         build_vars=$(jq -r --arg os "$os" --arg dist "$dist" --arg version "$version" --arg edition "$edition" '.os[] | select(.name == $os) | .types[] | select(.description == $dist) | .versions[$version][] | .editions[] | select(.edition == $edition) | .build_files[0].build' "$json_path")
     fi
 
     if [[ "$os" == *"Linux"* ]]; then
         ansible_vars=$(jq -r --arg os "$os" --arg dist "$dist" --arg version "$version" '.os[] | select(.name == $os) | .distributions[] | select(.description == $dist) | .versions | to_entries[] | .value[] | select(.version == $version) | .build_files[0].ansible' "$json_path")
-    elif [[ "$dist" == *"Windows"* ]]; then
+    elif [[ "$os" == *"Windows"* ]]; then
         ansible_vars=$(jq -r --arg os "$os" --arg dist "$dist" --arg version "$version" --arg edition "$edition" '.os[] | select(.name == $os) | .types[] | select(.description == $dist) | .versions[$version][] | .editions[] | select(.edition == $edition) | .build_files[0].ansible' "$json_path")
     fi
 
     if [[ "$os" == *"Linux"* ]]; then
         proxy_vars=$(jq -r --arg os "$os" --arg dist "$dist" --arg version "$version" '.os[] | select(.name == $os) | .distributions[] | select(.description == $dist) | .versions | to_entries[] | .value[] | select(.version == $version) | .build_files[0].proxy' "$json_path")
-    elif [[ "$dist" == *"Windows"* ]]; then
+    elif [[ "$os" == *"Windows"* ]]; then
         proxy_vars=$(jq -r --arg os "$os" --arg dist "$dist" --arg version "$version" --arg edition "$edition" '.os[] | select(.name == $os) | .types[] | select(.description == $dist) | .versions[$version][] | .editions[] | select(.edition == $edition) | .build_files[0].proxy' "$json_path")
     fi
 
     if [[ "$os" == *"Linux"* ]]; then
         common_vars=$(jq -r --arg os "$os" --arg dist "$dist" --arg version "$version" '.os[] | select(.name == $os) | .distributions[] | select(.description == $dist) | .versions | to_entries[] | .value[] | select(.version == $version) | .build_files[0].common' "$json_path")
-    elif [[ "$dist" == *"Windows"* ]]; then
+    elif [[ "$os" == *"Windows"* ]]; then
         common_vars=$(jq -r --arg os "$os" --arg dist "$dist" --arg version "$version" --arg edition "$edition" '.os[] | select(.name == $os) | .types[] | select(.description == $dist) | .versions[$version][] | .editions[] | select(.edition == $edition) | .build_files[0].common' "$json_path")
+    fi
+
+    # Omnissa Horizon settings live in a single shared file. Only the Horizon distribution
+    # declares it in project.json, so this resolves to null for every other build.
+    if [[ "$os" == *"Windows"* ]]; then
+        horizon_vars=$(jq -r --arg os "$os" --arg dist "$dist" --arg version "$version" --arg edition "$edition" '.os[] | select(.name == $os) | .types[] | select(.description == $dist) | .versions[$version][] | .editions[] | select(.edition == $edition) | .build_files[0].horizon // empty' "$json_path")
     fi
 
     if [[ "$os" == *"Linux"* ]]; then
@@ -959,6 +967,51 @@ select_build() {
             ;;
         esac
         ;;
+    "Horizon Desktop")
+        # The edition selects which golden image artifacts to produce. Instant Clone yields a
+        # snapshotted, non-generalized virtual machine; Full Clone yields a sysprepped template.
+        case "$edition" in
+        "Instant Clone")
+            horizon_sources="vsphere-iso.windows-horizon-instant"
+            ;;
+        "Full Clone")
+            horizon_sources="vsphere-iso.windows-horizon-template"
+            ;;
+        "Both")
+            horizon_sources="vsphere-iso.windows-horizon-instant,vsphere-iso.windows-horizon-template"
+            ;;
+        *)
+            print_message error "Unsupported edition: $dist $edition"
+            return
+            ;;
+        esac
+
+        var_files=("vsphere_vars" "build_vars" "ansible_vars" "proxy_vars" "common_vars" "horizon_vars" "BUILD_VARS")
+        validate_windows_username "$config_path/build.pkrvars.hcl"
+
+        if [[ -z "$horizon_vars" || ! -f "$config_path/$horizon_vars" ]]; then
+            print_message error "Missing the Omnissa Horizon settings file: $config_path/horizon.pkrvars.hcl. Run ./config.sh to generate it."
+            return
+        fi
+
+        printf "Starting the build of %s %s (%s)...\n\n" "$dist" "$version" "$edition"
+        command="packer build -force -on-error=ask $debug_option"
+        command+=" --only $horizon_sources"
+
+        for var_file in "${var_files[@]}"; do
+            command+=" -var-file=\"$config_path/${!var_file}\""
+        done
+
+        command+=" \"$INPUT_PATH\""
+
+        if [ $show_command -eq 1 ]; then
+            printf "\n"
+            printf "\n\033[32mThe following command is ran for this build:\033[0m\n"
+            printf "\n\e[34m%s\e[0m\n" "$command"
+        fi
+
+        eval "$command"
+        ;;
     *)
         print_message error "Unsupported distribution: $dist"
         ;;
@@ -985,10 +1038,21 @@ fi
 select_os
 
 # Prompt the user to continue or quit.
+#
+# A non-interactive run has nothing to answer this with, so exit instead of prompting. Without
+# both guards below the loop spins forever: read returns non-zero at end of file, action stays
+# empty, the case matches neither branch, and the prompt is reprinted without end.
+if [ "$auto_continue" = true ] || [ ! -t 0 ]; then
+    exit 0
+fi
+
 while true; do
     action=""
     printf "Would you like to \033[0;32mc\033[0m)ontinue, or \033[0;31mq\033[0m)uit? %s" "$action"
-    read -r action
+    if ! read -r action; then
+        # Standard input closed underneath an interactive run.
+        exit 0
+    fi
     log_message "info" "User selected: $action"
     case $action in
     [cC]*)

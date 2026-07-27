@@ -913,6 +913,81 @@
                             }
                         ]
                     }
+                },
+                {
+                    "type": "horizon",
+                    "description": "Horizon Desktop",
+                    "enabled": "true",
+                    "publisher": {
+                        "name": "Omnissa",
+                        "url": "https://omnissa.com"
+                    },
+                    "versions": {
+                        "11": [
+                            {
+                                "version": "11",
+                                "enabled": "true",
+                                "description": "Windows 11 golden image for Omnissa Horizon",
+                                "architectures": [
+                                    {
+                                        "architecture": "amd64",
+                                        "download_link": "https://go.microsoft.com/fwlink/?linkid=2334167&clcid=0x409&culture=en-us&country=us",
+                                        "filename": "windows-11-evaluation.iso",
+                                        "checksum_algorithm": "sha256",
+                                        "checksum": "",
+                                        "comments": "Use your own licensed media; evaluation media is not recommended for golden images."
+                                    }
+                                ],
+                                "editions": [
+                                    {
+                                        "edition": "Instant Clone",
+                                        "enabled": "true",
+                                        "description": "Snapshotted golden image, not generalized. For Horizon instant-clone pools.",
+                                        "build_files": [
+                                            {
+                                                "vsphere": "vsphere.pkrvars.hcl",
+                                                "build": "build.pkrvars.hcl",
+                                                "ansible": "ansible.pkrvars.hcl",
+                                                "proxy": "proxy.pkrvars.hcl",
+                                                "common": "common.pkrvars.hcl",
+                                                "horizon": "horizon.pkrvars.hcl"
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        "edition": "Full Clone",
+                                        "enabled": "true",
+                                        "description": "Sysprepped vSphere template. For full-clone pools and guest customization.",
+                                        "build_files": [
+                                            {
+                                                "vsphere": "vsphere.pkrvars.hcl",
+                                                "build": "build.pkrvars.hcl",
+                                                "ansible": "ansible.pkrvars.hcl",
+                                                "proxy": "proxy.pkrvars.hcl",
+                                                "common": "common.pkrvars.hcl",
+                                                "horizon": "horizon.pkrvars.hcl"
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        "edition": "Both",
+                                        "enabled": "true",
+                                        "description": "Builds the instant-clone golden image and the full-clone template.",
+                                        "build_files": [
+                                            {
+                                                "vsphere": "vsphere.pkrvars.hcl",
+                                                "build": "build.pkrvars.hcl",
+                                                "ansible": "ansible.pkrvars.hcl",
+                                                "proxy": "proxy.pkrvars.hcl",
+                                                "common": "common.pkrvars.hcl",
+                                                "horizon": "horizon.pkrvars.hcl"
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
                 }
             ]
         }
