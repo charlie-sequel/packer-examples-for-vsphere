@@ -58,9 +58,17 @@ horizon_agent_source_username = ""
 horizon_agent_source_anon_uid = ""
 horizon_agent_source_anon_gid = ""
 
-// Leave empty and export PKR_VAR_horizon_agent_source_password instead, so the credential stays
-// out of this file. It reaches the guest as an environment variable, never on a command line.
-horizon_agent_source_password = ""
+// Password for the SMB share.
+//
+// Do NOT assign it here, not even to "". Packer ranks var-files ABOVE PKR_VAR_ environment
+// variables, so an empty assignment in this file silently beats the environment and the mount
+// fails with "Cannot bind argument to parameter 'String' because it is an empty string". Leave
+// the line commented out and export it instead:
+//
+//     export PKR_VAR_horizon_agent_source_password='...'
+//
+// The variable defaults to "" in variables.pkr.hcl, so omitting it here is valid.
+// horizon_agent_source_password = ""
 
 // ---------------------------------------------------------------------------
 // Horizon Agent
@@ -76,10 +84,12 @@ horizon_agent_vc_managed = true
 horizon_connection_server          = ""
 horizon_connection_server_username = ""
 
-// Leave empty and export PKR_VAR_horizon_connection_server_password instead. The value is handed
-// to the guest as an environment variable and only assembled onto the installer command line
-// inside the guest, so it does not appear in the Packer log.
-horizon_connection_server_password = ""
+// Password for the Connection Server. Same rule as the share password above: do not assign it
+// here at all, because a var-file assignment outranks PKR_VAR_. Export it instead:
+//
+//     export PKR_VAR_horizon_connection_server_password='...'
+//
+// horizon_connection_server_password = ""
 
 // Maps to ADDLOCAL. Feature names below are the complete set read out of the Feature table of
 // Omnissa-Horizon-Agent-x86_64-2603-8.18.0 (ProductVersion 8.18.0). Names are case sensitive and
@@ -223,7 +233,9 @@ horizon_appvolumes_port    = 443
 // if your naming differs from the vendor defaults.
 
 horizon_agent_pattern      = "*Horizon-Agent-x86_64*.exe"
-horizon_dem_pattern        = "*Dynamic*Environment*Manager*.msi"
+// x64 is explicit: the DEM media ships x64 and x86 side by side with identical file
+// versions, and the name tie-break sorts descending, so a bare pattern picks x86.
+horizon_dem_pattern        = "*Dynamic*Environment*Manager*x64*.msi"
 horizon_fslogix_pattern    = "FSLogixAppsSetup.exe"
 horizon_appvolumes_pattern = "*App*Volumes*Agent*.msi"
 
@@ -232,7 +244,11 @@ horizon_appvolumes_pattern = "*App*Volumes*Agent*.msi"
 // ---------------------------------------------------------------------------
 
 horizon_osot_path               = "C:\\Tools\\OSOT"
-horizon_osot_optimization_level = "recommended"
+// OSOT accepts only all-item or no-item here. It is NOT a severity level: "recommended" and
+// friends are item categories inside a template, not command-line values. OSOT answers an
+// invalid value with "Invalid arguments" and then exits 0, so a wrong value here optimizes
+// nothing while the build reports success. Use -t (horizon_osot_template) to apply a subset.
+horizon_osot_optimization_level = "all-item"
 
 // Stage OSOT from the installer source before optimizing. Set false when OSOT is already baked
 // into the image, or when a wrapper script stages it. The pattern matches both VMware- and

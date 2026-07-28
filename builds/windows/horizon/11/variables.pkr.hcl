@@ -103,15 +103,15 @@ variable "vm_inst_os_eval" {
   default     = true
 }
 
-variable "vm_inst_os_image_pro" {
+variable "vm_inst_os_image" {
   type        = string
-  description = "The installation operating system image input.\nDoes not support evaluation."
-  default     = "Windows 11 Pro"
+  description = "Name of the image inside install.wim to deploy, exactly as the media lists it (for example \"Windows 11 Enterprise\"). A business-editions ISO carries several; the name selects which one. Does not support evaluation media."
+  default     = "Windows 11 Enterprise"
 }
 
-variable "vm_inst_os_key_pro" {
+variable "vm_inst_os_key" {
   type        = string
-  description = "The installation operating system key input."
+  description = "Product key written into the answer file. Must match the edition named above, or Setup stops at a key prompt with no console to answer it."
 }
 
 // Virtual Machine Settings
@@ -538,12 +538,12 @@ variable "horizon_osot_template" {
 
 variable "horizon_osot_optimization_level" {
   type        = string
-  description = "OSOT optimization level passed as -o: default, all, recommended, mandatory, or none."
-  default     = "recommended"
+  description = "Value for OSOT's -optimize argument. 'all-item' selects every item in the template; 'no-item' selects none. These are the only values OSOT accepts -- item categories such as \"recommended\" exist inside templates, not on the command line."
+  default     = "all-item"
 
   validation {
-    condition     = contains(["default", "all", "recommended", "mandatory", "none"], var.horizon_osot_optimization_level)
-    error_message = "The horizon_osot_optimization_level must be one of: default, all, recommended, mandatory, none."
+    condition     = contains(["all-item", "no-item"], var.horizon_osot_optimization_level)
+    error_message = "The horizon_osot_optimization_level must be all-item or no-item. OSOT rejects anything else -- and still exits 0, so a wrong value silently optimizes nothing."
   }
 }
 
@@ -676,6 +676,37 @@ variable "horizon_agent_features" {
 }
 
 // Omnissa Horizon: Agent Installer Patterns and Arguments
+
+variable "horizon_datastore_vcenter" {
+  type        = string
+  description = "vCenter host serving the datastore file endpoint. Defaults to vsphere_endpoint."
+  default     = ""
+}
+
+variable "horizon_datastore_username" {
+  type        = string
+  description = "Account used to read the datastore. Needs only Datastore > Browse and Low level file operations, plus read-only on the datacenter. This credential reaches the guest, so it should not be an administrator."
+  default     = ""
+}
+
+variable "horizon_datastore_password" {
+  type        = string
+  description = "Password for horizon_datastore_username. Do not assign it in a var-file: var-files outrank PKR_VAR_ environment variables. Export PKR_VAR_horizon_datastore_password instead."
+  default     = ""
+  sensitive   = true
+}
+
+variable "horizon_datastore_name" {
+  type        = string
+  description = "Datastore holding the installers, for example nautilus-software."
+  default     = ""
+}
+
+variable "horizon_datastore_path" {
+  type        = string
+  description = "Folder within the datastore to search, for example Omnissa."
+  default     = "Omnissa"
+}
 
 variable "horizon_agent_source_anon_uid" {
   type        = string

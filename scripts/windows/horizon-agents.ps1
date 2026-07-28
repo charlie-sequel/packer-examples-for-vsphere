@@ -109,7 +109,10 @@ param(
     [string]$ConnectionServerPassword,
 
     # Dynamic Environment Manager
-    [string]$DemPattern = '*Dynamic*Environment*Manager*.msi',
+    # x64 pinned: DEM ships x64 and x86 side by side with identical file versions, so an
+    # unqualified pattern lets the name tie-break choose x86, and a 64-bit host then rejects it
+    # with "not supported by this processor type" (MSI 1603).
+    [string]$DemPattern = '*Dynamic*Environment*Manager*x64*.msi',
     [string]$DemFeatures = 'FlexEngine',
     [string]$DemConfigShare,
     [string]$DemLicenseFile,
@@ -124,6 +127,17 @@ param(
     [string]$AppVolumesPattern = '*App*Volumes*Agent*.msi',
     [string]$AppVolumesManager,
     [int]$AppVolumesPort = 443,
+
+    # vSphere datastore source. Files are pulled from vCenter's datastore file endpoint over
+    # HTTPS, so the guest needs no SMB, no NFS client, and no mounted media -- only TCP 443 to
+    # vCenter. Nothing is mounted; matching installers are downloaded into the staging directory.
+    [string]$VCenterServer,
+    [string]$VCenterUsername,
+    [string]$VCenterPassword,
+    [string]$Datacenter,
+    [string]$DatastoreName,
+    [string]$DatastorePath = 'Omnissa',
+    [switch]$DatastoreInsecure,
 
     # Identity the Windows NFS client presents to the server. It mounts with -o anon, and its
     # default anonymous UID is -2 (4294967294) -- not the Linux nobody (65534). An export whose
@@ -182,6 +196,12 @@ foreach ($map in @(
         @{ P = 'FslogixProfilePath';       E = 'HORIZON_FSLOGIX_PROFILE_PATH' }
         @{ P = 'AppVolumesPattern';        E = 'HORIZON_APPVOLUMES_PATTERN' }
         @{ P = 'AppVolumesManager';        E = 'HORIZON_APPVOLUMES_MANAGER' }
+        @{ P = 'VCenterServer';            E = 'HORIZON_VCENTER_SERVER' }
+        @{ P = 'VCenterUsername';          E = 'HORIZON_VCENTER_USERNAME' }
+        @{ P = 'VCenterPassword';          E = 'HORIZON_VCENTER_PASSWORD' }
+        @{ P = 'Datacenter';               E = 'HORIZON_VCENTER_DATACENTER' }
+        @{ P = 'DatastoreName';            E = 'HORIZON_DATASTORE_NAME' }
+        @{ P = 'DatastorePath';            E = 'HORIZON_DATASTORE_PATH' }
         @{ P = 'AnonymousUid';             E = 'HORIZON_SOURCE_ANON_UID' }
         @{ P = 'AnonymousGid';             E = 'HORIZON_SOURCE_ANON_GID' }
         @{ P = 'OsotPattern';              E = 'HORIZON_OSOT_PATTERN' }
@@ -191,6 +211,11 @@ foreach ($map in @(
     $value = [Environment]::GetEnvironmentVariable($map.E)
     if ([string]::IsNullOrWhiteSpace($value)) { continue }
     Set-Variable -Name $map.P -Value $value
+}
+
+# Switches cannot come through the string map above.
+if (-not $PSBoundParameters.ContainsKey('DatastoreInsecure') -and $env:HORIZON_DATASTORE_INSECURE -in @('1', 'true', 'True')) {
+    $DatastoreInsecure = [switch]$true
 }
 
 if (-not $PSBoundParameters.ContainsKey('Include') -and $env:HORIZON_INCLUDE) {
@@ -405,38 +430,149 @@ function Connect-NfsSource {
 }
 
 function Connect-DatastoreSource {
-    # Packer mounts datastore ISOs as CD/DVD drives. Identify the installer ISO by looking for a
-    # drive that actually contains one of the agent installers, rather than by volume label, so
-    # the ISO can be renamed without breaking the build.
-    Write-Step 'Scanning attached CD/DVD drives for an installer ISO...' -Status RUN
+    # Pull installers from a vSphere datastore over vCenter's datastore file endpoint.
+    #
+    # Nothing is mounted: the guest needs only TCP 443 to vCenter -- no SMB, no NFS client, no
+    # optional Windows feature, no anonymous UID mapping, no media attached to the VM. Only the
+    # files this build needs are fetched, into the same staging directory the other source types
+    # copy into, so everything downstream is unchanged.
+    #
+    # curl.exe rather than Invoke-WebRequest. Windows 11 ships curl in System32, it handles a
+    # self-signed certificate with -k, and it needs none of .NET's certificate plumbing --
+    # ServicePointManager's CertificatePolicy and ServerCertificateValidationCallback each
+    # misbehaved here, one hanging and the other closing every connection.
+    #
+    # Credentials go in a curl config file, never on the command line, so they stay out of the
+    # guest's process list. The file is removed as soon as the transfers finish.
+    param([string[]]$Patterns)
 
-    $patterns = @($HorizonAgentPattern, $DemPattern, $FslogixPattern, $AppVolumesPattern)
-    $drives = Get-CimInstance Win32_CDROMDrive -ErrorAction SilentlyContinue | Where-Object { $_.MediaLoaded }
+    if (-not $VCenterServer -or -not $DatastoreName) {
+        Write-Step 'Datastore source needs at least a vCenter server and a datastore name.' -Status WARN
+        return $null
+    }
+    $curl = Join-Path $env:SystemRoot 'System32\curl.exe'
+    if (-not (Test-Path $curl)) {
+        Write-Step "curl.exe not found at $curl; the datastore source requires it." -Status WARN
+        return $null
+    }
+    Write-Step "Connecting to datastore [$DatastoreName] $DatastorePath on $VCenterServer" -Status RUN
 
-    foreach ($drive in $drives) {
-        $root = "$($drive.Drive)\"
-        foreach ($pattern in $patterns) {
-            $hit = Get-ChildItem -Path $root -Recurse -File -ErrorAction SilentlyContinue |
-                Where-Object { $_.Name -like $pattern } | Select-Object -First 1
-            if ($hit) {
-                Write-Step "Found installers on $root" -Status OK
-                return $root
+    $staging = Join-Path $LogPath 'datastore'
+    if (-not (Test-Path $staging)) { New-Item -Path $staging -ItemType Directory -Force | Out-Null }
+    $curlConfig = Join-Path $LogPath 'vc.curlrc'
+    Set-Content -LiteralPath $curlConfig -Encoding ASCII -Value @(
+        "user = `"$VCenterUsername`:$VCenterPassword`""
+        $(if ($DatastoreInsecure) { 'insecure' })
+        'silent'
+        'show-error'
+        'fail'
+    )
+
+    $query = "dcPath=$([Uri]::EscapeDataString($Datacenter))&dsName=$([Uri]::EscapeDataString($DatastoreName))"
+    $downloaded = 0
+
+    # Native commands write progress and HTTP errors to stderr, and with ErrorActionPreference set
+    # to Stop that alone is a terminating error -- a single 404 on a folder probe would end the
+    # script instead of being skipped. Exit codes are checked explicitly below.
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $pending = New-Object System.Collections.Queue
+        $pending.Enqueue($DatastorePath.Trim('/'))
+        # Listings link to their own parent as well as their children, so paths must come from the
+        # href itself rather than being appended to the folder being listed -- appending turned a
+        # parent link into 'Omnissa/DEM/Optional Components/Omnissa/DEM' and a storm of 404s. The
+        # visited set stops the parent/child cycle those links create.
+        $visited = New-Object System.Collections.Generic.HashSet[string]
+        [void]$visited.Add($DatastorePath.Trim('/'))
+
+        while ($pending.Count -gt 0) {
+            $folder = $pending.Dequeue()
+            $encoded = ($folder -split '/' | Where-Object { $_ } | ForEach-Object { [Uri]::EscapeDataString($_) }) -join '/'
+            $listing = & $curl -K $curlConfig "https://$VCenterServer/folder/$encoded`?$query" 2>&1 | Out-String
+            if ($LASTEXITCODE -ne 0) {
+                Write-Step "Could not list '$folder' (curl exit $LASTEXITCODE): $($listing.Trim())" -Status WARN
+                continue
+            }
+
+            # Entries look like: <a href="/folder/Omnissa/Horizon?dcPath=..&dsName=..">Horizon</a>
+            # Directories and files are indistinguishable from the href alone, but the row text
+            # carries a size for files, so recurse on anything that does not match a pattern.
+            foreach ($m in [regex]::Matches($listing, 'href="(/folder/[^"]*?)"')) {
+                $href = $m.Groups[1].Value -replace '&amp;', '&'
+                # The href carries the complete path already: /folder/<path>?dcPath=...
+                $path = [Uri]::UnescapeDataString((($href -split '\?')[0]))
+                $path = $path -replace '^/folder/?', ''
+                $path = $path.Trim('/')
+                if (-not $path) { continue }
+                $name = ($path -split '/')[-1]
+                if (-not $name -or $name -eq '..') { continue }
+                $child = $path
+
+                if ($Patterns | Where-Object { $name -like $_ }) {
+                    $target = Join-Path $staging $name
+                    if (Test-Path $target) { continue }
+                    Write-Step "Downloading $name ..." -Status RUN
+                    & $curl -K $curlConfig -o $target "https://$VCenterServer$href" 2>&1 | Out-Null
+                    if ($LASTEXITCODE -eq 0 -and (Test-Path $target)) {
+                        $size = [Math]::Round((Get-Item -LiteralPath $target).Length / 1MB, 1)
+                        Write-Step "  $name ($size MB)" -Status OK
+                        $script:CopiedMedia += $target
+                        $downloaded++
+                    }
+                    else {
+                        Write-Step "  download failed for $name (curl exit $LASTEXITCODE)" -Status WARN
+                        Remove-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue
+                    }
+                    continue
+                }
+
+                # Not a wanted file: treat as a folder and let the listing call decide. A file
+                # returns a non-HTML body and simply yields no further links.
+                if ($name -notmatch '\.[A-Za-z0-9]{2,4}$' -and $visited.Add($child)) { $pending.Enqueue($child) }
             }
         }
     }
+    finally {
+        $ErrorActionPreference = $previousPreference
+        Remove-Item -LiteralPath $curlConfig -Force -ErrorAction SilentlyContinue
+    }
 
-    Write-Step 'No CD/DVD drive contained a recognizable agent installer.' -Status WARN
-    return $null
+    # Clear whatever curl last set: an unrelated 404 while probing a folder would otherwise become
+    # this script's exit status, failing a provisioner whose work actually succeeded.
+    $global:LASTEXITCODE = 0
+
+    if ($downloaded -eq 0) {
+        Write-Step "Nothing on [$DatastoreName] $DatastorePath matched the patterns for this build." -Status WARN
+        return $null
+    }
+    Write-Step "Downloaded $downloaded file(s) to $staging" -Status OK
+    return $staging
 }
 
 function Resolve-InstallerSource {
+    # Only fetch what this run needs. Staging OSOT wants the OSOT executable; an agent run wants
+    # the installers for the agents actually selected. Used by the datastore source, which
+    # downloads rather than mounts, so pulling the whole tree would be wasteful.
+    $wanted = if ($StageOsotOnly) {
+        @($OsotPattern)
+    }
+    else {
+        @(
+            $(if ($Include -contains 'HorizonAgent') { $HorizonAgentPattern })
+            $(if ($Include -contains 'Dem') { $DemPattern })
+            $(if ($Include -contains 'Fslogix') { $FslogixPattern })
+            $(if ($Include -contains 'AppVolumes') { $AppVolumesPattern })
+        ) | Where-Object { $_ }
+    }
+
     switch ($SourceType) {
         'Smb'       { return Connect-SmbSource -Path $SourcePath -Username $SourceUsername -Password $SourcePassword }
         'Nfs'       { return Connect-NfsSource -Path $SourcePath }
-        'Datastore' { return Connect-DatastoreSource }
+        'Datastore' { return Connect-DatastoreSource -Patterns $wanted }
         'Auto' {
-            # Cheapest and most reliable first: a locally attached ISO needs no credentials.
-            $root = Connect-DatastoreSource
+            # Datastore first: it needs no share, no optional feature, and no mounted media.
+            $root = Connect-DatastoreSource -Patterns $wanted
             if ($root) { return $root }
             if ($SourcePath -match '^\\\\') {
                 $root = Connect-SmbSource -Path $SourcePath -Username $SourceUsername -Password $SourcePassword
@@ -788,6 +924,7 @@ if ($StageOsotOnly) {
         }
         Copy-Item -LiteralPath $osot.FullName -Destination $OsotDestination -Force
         Write-Step "Staged $($osot.Name) to $OsotDestination" -Status OK
+        $global:LASTEXITCODE = 0
     }
     finally {
         Disconnect-InstallerSource

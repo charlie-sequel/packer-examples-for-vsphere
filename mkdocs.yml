@@ -150,6 +150,7 @@ nav:
       - Configure: getting-started/configure.md
       - Build: getting-started/build.md
       - Omnissa Horizon: getting-started/horizon.md
+      - Installer Sources: getting-started/installer-sources.md
       - GitLab CI/CD: getting-started/gitlab-ci-cd.md
       - FAQ: getting-started/faq.md
   - Community:

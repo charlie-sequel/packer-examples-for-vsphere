@@ -38,11 +38,16 @@ Or select `Horizon Desktop` from the interactive menu.
 The order is load bearing and not the same as the order you would follow by hand:
 
 ```
-source check → ansible → [NFS client + restart] → stage OSOT → OSOT Optimize → agents →
+source check → ansible → [NFS client + restart] → stage OSOT → agents → OSOT Optimize →
 AppX cleanup → OSOT Finalize → OSOT Generalize
 ```
 
 The NFS client steps run only when `horizon_agent_source_type = "Nfs"`.
+
+Agents install **before** optimization, which is Omnissa's documented order: Horizon Agent first,
+then Dynamic Environment Manager, FSLogix, and App Volumes last, and only then OSOT. Optimizing
+first lets the agent installers re-enable services OSOT has just disabled, and denies OSOT sight
+of the agents it carries optimizations for.
 
 !!! warning "Do not move the NFS client install ahead of the patching pass"
 
@@ -160,9 +165,13 @@ showmount -e <nas>                   # confirm the export is visible
     build subnet and allow anonymous read. `Smb` avoids the feature install, the restart, and the
     anonymous-access requirement.
 
-!!! warning "Keep the share password out of the configuration file"
+!!! warning "Do not assign the password in the configuration file at all"
 
-    Leave `horizon_agent_source_password` empty and export it instead:
+    Packer ranks var-files **above** `PKR_VAR_` environment variables, so
+    `horizon_agent_source_password = ""` in `horizon.pkrvars.hcl` silently overrides the
+    environment and the SMB mount fails with *"Cannot bind argument to parameter 'String' because
+    it is an empty string"*. Leave the assignment out entirely — the variable defaults to `""` —
+    and export it:
 
     ```shell
     export PKR_VAR_horizon_agent_source_password='...'
@@ -396,6 +405,32 @@ horizon_osot_pattern           = "*OSOptimizationTool*.exe"
 Set `horizon_osot_stage_from_source = false` when OSOT is already baked into the image. Staging is
 also skipped automatically when `horizon_osot_wrapper_script` is set, on the assumption the wrapper
 stages the tool itself.
+
+### Optimization Level
+
+```hcl
+horizon_osot_optimization_level = "all-item"
+```
+
+!!! danger "`all-item` and `no-item` are the only accepted values"
+
+    `-o` is the **abbreviation for `-optimize`**, not a separate "level" flag, and it takes
+    `all-item` (select every item in the template) or `no-item` (select none). Severity names like
+    `recommended` are item *categories inside a template*, not command-line values.
+
+    This matters more than it looks: given anything else, OSOT prints `Invalid arguments` and then
+    **exits 0**. A wrong value therefore optimizes nothing while the build reports success. The
+    build guards against this by reading OSOT's console output and failing on that message rather
+    than trusting the exit code.
+
+    To apply a subset of items, supply a template with `horizon_osot_template` (`-t`).
+
+!!! note "OSOT writes no report for `-optimize`"
+
+    `-r` is for analysis output; an optimize run leaves no report file behind. Do not treat a
+    missing report as a failure. OSOT performs the work through short-lived elevated scheduled
+    tasks (`Omnissa\OptimizationToolTask\ElevatedTask*`), which is what you see in its console
+    output.
 
 ### Finalize Steps
 

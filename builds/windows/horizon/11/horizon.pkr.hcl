@@ -20,8 +20,12 @@
 
     Provisioner order is load bearing:
 
-      source check -> ansible -> [NFS client + restart] -> stage OSOT -> OSOT Optimize -> agents
+      source check -> ansible -> [NFS client + restart] -> stage OSOT -> agents -> OSOT Optimize
       -> AppX cleanup -> OSOT Finalize -> OSOT Generalize
+
+    Agents before optimization is Omnissa's documented order: Horizon Agent first, then Dynamic
+    Environment Manager, FSLogix, and App Volumes last, and only then OSOT. Optimizing first lets
+    the agent installers re-enable services OSOT has just disabled.
 
     Generalize is sysprep. It wipes the autologon, resets Windows Remote Management, and returns
     the guest to OOBE, so Packer cannot reconnect afterwards. Anything that must run on the image
@@ -106,12 +110,28 @@ locals {
   // session fails with "Network Error - 53", which reads like an unreachable server. So when the
   // installer source is NFS, enable the feature and restart before anything tries to mount.
   // SMB and Datastore sources need none of this.
-  nfs_targets = var.horizon_agent_source_type == "Nfs" ? ["vsphere-iso.windows-horizon-instant", "vsphere-iso.windows-horizon-template"] : []
+  // Both sources, and a sentinel that matches no source.
+  //
+  // `only = []` does NOT disable a provisioner: Packer reads an empty list as "no restriction" and
+  // runs it for every source, which is the opposite of the intent. A list naming a source that
+  // does not exist is what actually skips it. Verified against a null builder: `only = []` ran,
+  // `only = ["null.__disabled__"]` did not.
+  all_targets = ["vsphere-iso.windows-horizon-instant", "vsphere-iso.windows-horizon-template"]
+  no_targets  = ["vsphere-iso.__disabled__"]
+
+  nfs_targets = var.horizon_agent_source_type == "Nfs" ? ["vsphere-iso.windows-horizon-instant", "vsphere-iso.windows-horizon-template"] : ["vsphere-iso.__disabled__"]
 
   agent_env = [
     "HORIZON_SOURCE_TYPE=${var.horizon_agent_source_type}",
     "HORIZON_SOURCE_PATH=${var.horizon_agent_source_path}",
     "HORIZON_SOURCE_USERNAME=${var.horizon_agent_source_username}",
+    "HORIZON_VCENTER_SERVER=${var.horizon_datastore_vcenter == "" ? var.vsphere_endpoint : var.horizon_datastore_vcenter}",
+    "HORIZON_VCENTER_USERNAME=${var.horizon_datastore_username}",
+    "HORIZON_VCENTER_PASSWORD=${var.horizon_datastore_password}",
+    "HORIZON_VCENTER_DATACENTER=${var.vsphere_datacenter}",
+    "HORIZON_DATASTORE_NAME=${var.horizon_datastore_name}",
+    "HORIZON_DATASTORE_PATH=${var.horizon_datastore_path}",
+    "HORIZON_DATASTORE_INSECURE=${var.vsphere_insecure_connection ? "1" : "0"}",
     "HORIZON_SOURCE_ANON_UID=${var.horizon_agent_source_anon_uid}",
     "HORIZON_SOURCE_ANON_GID=${var.horizon_agent_source_anon_gid}",
     "HORIZON_SOURCE_PASSWORD=${var.horizon_agent_source_password}",
@@ -196,8 +216,8 @@ source "vsphere-iso" "windows-horizon-instant" {
       vm_inst_os_eval      = var.vm_inst_os_eval
       vm_inst_os_language  = var.vm_inst_os_language
       vm_inst_os_keyboard  = var.vm_inst_os_keyboard
-      vm_inst_os_image     = var.vm_inst_os_image_pro
-      vm_inst_os_key       = var.vm_inst_os_key_pro
+      vm_inst_os_image     = var.vm_inst_os_image
+      vm_inst_os_key       = var.vm_inst_os_key
       vm_guest_os_language = var.vm_guest_os_language
       vm_guest_os_keyboard = var.vm_guest_os_keyboard
       vm_guest_os_timezone = var.vm_guest_os_timezone
@@ -300,8 +320,8 @@ source "vsphere-iso" "windows-horizon-template" {
       vm_inst_os_eval      = var.vm_inst_os_eval
       vm_inst_os_language  = var.vm_inst_os_language
       vm_inst_os_keyboard  = var.vm_inst_os_keyboard
-      vm_inst_os_image     = var.vm_inst_os_image_pro
-      vm_inst_os_key       = var.vm_inst_os_key_pro
+      vm_inst_os_image     = var.vm_inst_os_image
+      vm_inst_os_key       = var.vm_inst_os_key
       vm_guest_os_language = var.vm_guest_os_language
       vm_guest_os_keyboard = var.vm_guest_os_keyboard
       vm_guest_os_timezone = var.vm_guest_os_timezone
@@ -374,11 +394,18 @@ build {
     ]
     environment_vars = local.agent_env
     valid_exit_codes = [0]
-    only             = var.horizon_agents_enabled || var.horizon_osot_stage_from_source ? ["vsphere-iso.windows-horizon-instant", "vsphere-iso.windows-horizon-template"] : []
+    only             = var.horizon_agents_enabled || var.horizon_osot_stage_from_source ? local.all_targets : local.no_targets
   }
 
   //  Base operating system configuration and patching.
+  //
+  //  Retried because the guest can outlast Ansible's patience across the reboot at the end of
+  //  Windows Update: the play aborts with the host UNREACHABLE while the guest is merely slow to
+  //  bring Windows Remote Management back, and comes back healthy minutes later. `until`/`retries`
+  //  inside the role cannot help -- those retry a failed task, whereas an unreachable host ends
+  //  the play outright. The playbook is idempotent, so a re-run resumes rather than repeats.
   provisioner "ansible" {
+    max_retries            = 2
     user                   = var.build_username
     galaxy_file            = "${path.cwd}/ansible/windows-requirements.yml"
     galaxy_force_with_deps = true
@@ -446,20 +473,7 @@ build {
     environment_vars = concat(local.agent_env, local.osot_env)
     execute_command  = "powershell -ExecutionPolicy Bypass -NoProfile -Command \"& { . {{.Vars}}; & '{{.Path}}' -StageOsotOnly; exit $LastExitCode }\""
     valid_exit_codes = [0]
-    only             = var.horizon_osot_enabled && var.horizon_osot_stage_from_source && var.horizon_osot_wrapper_script == "" ? ["vsphere-iso.windows-horizon-instant", "vsphere-iso.windows-horizon-template"] : []
-  }
-
-  //  OSOT Optimize. Runs before the agents so the agents install onto an already optimized image.
-  provisioner "powershell" {
-    script           = "${path.cwd}/scripts/windows/horizon-osot.ps1"
-    environment_vars = local.osot_env
-    execute_command  = "powershell -ExecutionPolicy Bypass -NoProfile -Command \"& { . {{.Vars}}; & '{{.Path}}' -Action Optimize; exit $LastExitCode }\""
-    valid_exit_codes = [0, 3010]
-    only             = var.horizon_osot_enabled ? ["vsphere-iso.windows-horizon-instant", "vsphere-iso.windows-horizon-template"] : []
-  }
-
-  provisioner "windows-restart" {
-    restart_timeout = "30m"
+    only             = var.horizon_osot_enabled && var.horizon_osot_stage_from_source && var.horizon_osot_wrapper_script == "" ? local.all_targets : local.no_targets
   }
 
   //  Agent stack: Horizon Agent, Dynamic Environment Manager, FSLogix, then App Volumes last.
@@ -473,7 +487,7 @@ build {
     environment_vars = local.agent_env
     execute_command  = "powershell -ExecutionPolicy Bypass -NoProfile -Command \"& { . {{.Vars}}; & '{{.Path}}' -Detached; exit $LastExitCode }\""
     valid_exit_codes = [0]
-    only             = var.horizon_agents_enabled ? ["vsphere-iso.windows-horizon-instant", "vsphere-iso.windows-horizon-template"] : []
+    only             = var.horizon_agents_enabled ? local.all_targets : local.no_targets
   }
 
   //  The detached install reboots the guest itself once it is finished, so there is nothing for a
@@ -500,7 +514,47 @@ build {
       "Write-Host '  Agent stack verified.'"
     ]
     valid_exit_codes = [0]
-    only             = var.horizon_agents_enabled ? ["vsphere-iso.windows-horizon-instant", "vsphere-iso.windows-horizon-template"] : []
+    only             = var.horizon_agents_enabled ? local.all_targets : local.no_targets
+  }
+
+  //  OSOT Optimize. Runs AFTER the agent stack, per Omnissa's documented order:
+  //  install the Horizon Agent first, then DEM, FSLogix and App Volumes, and only then
+  //  optimize. Optimizing first lets the agent installers re-enable services OSOT had just
+  //  disabled, and denies OSOT sight of the agents it has optimizations for.
+  provisioner "powershell" {
+    script           = "${path.cwd}/scripts/windows/horizon-osot.ps1"
+    environment_vars = local.osot_env
+    execute_command  = "powershell -ExecutionPolicy Bypass -NoProfile -Command \"& { . {{.Vars}}; & '{{.Path}}' -Action Optimize; exit $LastExitCode }\""
+    valid_exit_codes = [0, 3010]
+    only             = var.horizon_osot_enabled ? local.all_targets : local.no_targets
+  }
+
+  provisioner "windows-restart" {
+    restart_timeout = "30m"
+  }
+
+  //  Re-assert the power settings after OSOT.
+  //
+  //  OSOT selects its own active power plan and prevents sleep through Machine Policy, which does
+  //  not take effect until policy refreshes -- but it only issues immediate powercfg commands for
+  //  the monitor and disk timeouts, not for standby. That gap let the guest sleep mid-build, which
+  //  presents as "no route to host" with a healthy operating system that wakes on a keypress.
+  provisioner "powershell" {
+    inline = [
+      "$ErrorActionPreference = 'Continue'",
+      "foreach ($s in @('standby-timeout-ac','standby-timeout-dc','hibernate-timeout-ac','hibernate-timeout-dc','monitor-timeout-ac','monitor-timeout-dc','disk-timeout-ac','disk-timeout-dc')) { powercfg.exe /change $s 0 | Out-Null }",
+      "powercfg.exe /hibernate off | Out-Null",
+      "Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Power' -Name 'PlatformAoAcOverride' -Value 0 -Type DWord -Force",
+      "Write-Host '  sleep, hibernation, and display timeouts disabled after OSOT'",
+      "powercfg.exe /query SCHEME_CURRENT SUB_SLEEP STANDBYIDLE 2>&1 | Select-String 'Power Setting Index' | ForEach-Object { Write-Host \"  standby idle: $_\" }",
+      "# OSOT with -optimize all-item selects every item in its template, including ones that are",
+      "# off by default -- among them 'Disable Power - Service'. powercfg then fails with 0x6ba,",
+      "# 'The RPC server is unavailable'. Do not let that end the build: the settings above are a",
+      "# safeguard, not the point of the image, and they were already applied at specialize time.",
+      "$global:LASTEXITCODE = 0",
+      "exit 0"
+    ]
+    valid_exit_codes = [0]
   }
 
   //  Remove the packages that Windows reprovisions and that block Sysprep. Done here rather than
@@ -524,7 +578,7 @@ build {
     environment_vars = local.osot_env
     execute_command  = "powershell -ExecutionPolicy Bypass -NoProfile -Command \"& { . {{.Vars}}; & '{{.Path}}' -Action Finalize; exit $LastExitCode }\""
     valid_exit_codes = [0, 3010]
-    only             = var.horizon_osot_enabled ? ["vsphere-iso.windows-horizon-instant", "vsphere-iso.windows-horizon-template"] : []
+    only             = var.horizon_osot_enabled ? local.all_targets : local.no_targets
   }
 
   //  OSOT Generalize. Full-clone template only, and always last: this syspreps the guest, so
@@ -534,7 +588,7 @@ build {
     environment_vars = local.osot_env
     execute_command  = "powershell -ExecutionPolicy Bypass -NoProfile -Command \"& { . {{.Vars}}; & '{{.Path}}' -Action Generalize -Shutdown; exit $LastExitCode }\""
     valid_exit_codes = [0, 3010, 1, 259]
-    only             = var.horizon_osot_enabled ? ["vsphere-iso.windows-horizon-template"] : []
+    only             = var.horizon_osot_enabled ? ["vsphere-iso.windows-horizon-template"] : local.no_targets
   }
 
   post-processor "manifest" {

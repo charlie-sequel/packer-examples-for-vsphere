@@ -22,7 +22,7 @@
 // Microsoft's public KMS client key (GVLK) for Windows 11 Pro; the image installs unactivated
 // and clones activate against your KMS host. Replace it if you use a different edition or MAK.
 vm_inst_os_eval    = false
-vm_inst_os_key_pro = "W269N-WFGWX-YVC9B-4J6C9-T83GX"
+vm_inst_os_key = "W269N-WFGWX-YVC9B-4J6C9-T83GX"
 
 // Virtual Machine Guest Operating System Setting
 vm_guest_os_type = "windows9_64Guest"

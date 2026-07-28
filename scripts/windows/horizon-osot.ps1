@@ -35,7 +35,7 @@
     Optimization template passed to OSOT as -t. Omit to use the tool's default for the detected OS.
 
     .PARAMETER OptimizationLevel
-    Value for OSOT's -o argument: default, all, recommended, mandatory, or none.
+    Value for OSOT's -optimize argument: all-item or no-item.
 
     .PARAMETER FinalizeSteps
     Comma-separated OSOT finalize step numbers, or 'all'.
@@ -77,8 +77,11 @@ param(
     [string]$OsotExecutable,
     [string]$Template,
 
-    [ValidateSet('default', 'all', 'recommended', 'mandatory', 'none')]
-    [string]$OptimizationLevel = 'recommended',
+    # The only values OSOT accepts for -optimize. 'all-item' selects every item in the default or
+    # selected template; 'no-item' selects none. Categories such as "recommended" live inside the
+    # templates, not on the command line -- to apply a subset, supply a template with -t.
+    [ValidateSet('all-item', 'no-item')]
+    [string]$OptimizationLevel = 'all-item',
 
     [string]$FinalizeSteps = '0,1',
 
@@ -86,7 +89,10 @@ param(
 
     [string]$WrapperScript,
 
-    [string]$LogPath = 'C:\Windows\Temp\horizon-osot'
+    [string]$LogPath = 'C:\Windows\Temp\horizon-osot',
+
+    # Ceiling on a single OSOT action. Optimize is the long one; Generalize ends the guest anyway.
+    [int]$TimeoutMinutes = 60
 )
 
 $ErrorActionPreference = 'Stop'
@@ -163,8 +169,10 @@ $arguments = @()
 
 switch ($Action) {
     'Optimize' {
-        $arguments += '-optimize'
-        $arguments += @('-o', $OptimizationLevel)
+        # -o IS the abbreviation for -optimize and takes all-item or no-item. Passing both, or any
+        # other value, makes OSOT print "Invalid arguments" and then EXIT 0 -- so the exit code
+        # alone cannot tell you it did nothing. The console check below is what catches that.
+        $arguments += @('-optimize', $OptimizationLevel)
         if ($Template) { $arguments += @('-t', $Template) }
         $arguments += @('-r', "`"$report`"")
     }
@@ -192,8 +200,30 @@ if ($Shutdown) { $arguments += '-shutdown' }
 
 Write-Step "Running: $(Split-Path $OsotExecutable -Leaf) $($arguments -join ' ')" -Status RUN
 
+# Run through a .cmd wrapper with a bounded wait, for the same two reasons as the agent installer.
+#
+# Quoting: -ArgumentList re-quotes on its way to CreateProcess, which mangles the quoted report
+# path. cmd takes the line exactly as written, and the file is left behind so the real command is
+# visible after a failure.
+#
+# Timeout: Start-Process -Wait has no ceiling. OSOT has been observed exiting without writing its
+# report while the wait never returned -- the build then sits silently on a healthy, idle guest
+# until someone notices hours later. A ceiling turns that into a clear failure.
+$wrapper = Join-Path $LogPath "osot-$($Action.ToLower()).cmd"
+$consoleLog = Join-Path $LogPath "osot-$($Action.ToLower())-console.log"
+Set-Content -LiteralPath $wrapper -Encoding ASCII -Value @"
+@echo off
+"$OsotExecutable" $($arguments -join ' ') > "$consoleLog" 2>&1
+exit /b %ERRORLEVEL%
+"@
+Write-Step "Wrapper: $wrapper" -Status Info
+
 try {
-    $process = Start-Process -FilePath $OsotExecutable -ArgumentList $arguments -Wait -PassThru -ErrorAction Stop
+    $process = Start-Process -FilePath $env:ComSpec -ArgumentList '/c', "`"$wrapper`"" -PassThru -ErrorAction Stop
+    if (-not $process.WaitForExit($TimeoutMinutes * 60 * 1000)) {
+        try { $process.Kill() } catch { }
+        throw "OSOT $Action did not finish within $TimeoutMinutes minutes. Report: $report"
+    }
     $code = $process.ExitCode
 }
 catch {
@@ -204,6 +234,20 @@ catch {
         return
     }
     throw
+}
+
+# The exit code is not sufficient: OSOT returns 0 even when it rejects the command line and does
+# nothing at all. Echo what it actually said, and fail on the rejection message.
+if (Test-Path $consoleLog) {
+    $console = Get-Content -LiteralPath $consoleLog -Raw -ErrorAction SilentlyContinue
+    if ($console) {
+        foreach ($line in ($console -split "`r?`n" | Where-Object { $_.Trim() })) {
+            Write-Step "  $line" -Status Info
+        }
+        if ($console -match 'Invalid arguments') {
+            throw "OSOT rejected the command line for $Action and did nothing. It exits 0 regardless, so this is detected from its output. Console: $consoleLog"
+        }
+    }
 }
 
 switch ($code) {
