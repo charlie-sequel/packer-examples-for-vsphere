@@ -198,6 +198,14 @@ source "vsphere-iso" "windows-horizon-instant" {
     network      = var.vsphere_network
     network_card = var.vm_network_card
   }
+  // Applied to everything this environment builds, so backup policy picks up new templates and
+  // golden images automatically rather than by someone remembering. The category and tag must
+  // already exist in vCenter -- Packer attaches them, it does not create them.
+  tag {
+    category = "Backup"
+    name     = "weekly"
+  }
+
   vm_version           = var.common_vm_version
   remove_cdrom         = var.common_remove_cdrom
   reattach_cdroms      = var.vm_cdrom_count
@@ -302,6 +310,14 @@ source "vsphere-iso" "windows-horizon-template" {
     network      = var.vsphere_network
     network_card = var.vm_network_card
   }
+  // Applied to everything this environment builds, so backup policy picks up new templates and
+  // golden images automatically rather than by someone remembering. The category and tag must
+  // already exist in vCenter -- Packer attaches them, it does not create them.
+  tag {
+    category = "Backup"
+    name     = "weekly"
+  }
+
   vm_version           = var.common_vm_version
   remove_cdrom         = var.common_remove_cdrom
   reattach_cdroms      = var.vm_cdrom_count

@@ -988,6 +988,52 @@
                             }
                         ]
                     }
+                },
+                {
+                    "type": "sds",
+                    "description": "SDS Client Connector",
+                    "enabled": "true",
+                    "publisher": {
+                        "name": "Microsoft",
+                        "url": "https://microsoft.com"
+                    },
+                    "versions": {
+                        "11": [
+                            {
+                                "version": "11",
+                                "enabled": "true",
+                                "description": "Windows 11 client connector image for SDS",
+                                "architectures": [
+                                    {
+                                        "architecture": "amd64",
+                                        "download_link": "https://go.microsoft.com/fwlink/?linkid=2334167&clcid=0x409&culture=en-us&country=us",
+                                        "filename": "windows-11-evaluation.iso",
+                                        "checksum_algorithm": "sha256",
+                                        "checksum": "",
+                                        "comments": "Use your own licensed media; evaluation media is not recommended for golden images."
+                                    }
+                                ],
+                                "editions": [
+                                    {
+                                        "edition": "Template",
+                                        "enabled": "true",
+                                        "description": "Sysprepped vSphere template with the connector toolset installed.",
+                                        "build_files": [
+                                            {
+                                                "vsphere": "vsphere.pkrvars.hcl",
+                                                "build": "build.pkrvars.hcl",
+                                                "ansible": "ansible.pkrvars.hcl",
+                                                "proxy": "proxy.pkrvars.hcl",
+                                                "common": "common.pkrvars.hcl",
+                                                "sds": "sds.pkrvars.hcl",
+                                                "BUILD_VARS": "windows-sds-11.pkrvars.hcl"
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
                 }
             ]
         }

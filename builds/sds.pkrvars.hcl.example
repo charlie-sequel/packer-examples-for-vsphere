@@ -1,0 +1,172 @@
+# © Broadcom. All Rights Reserved.
+# The term "Broadcom" refers to Broadcom Inc. and/or its subsidiaries.
+# SPDX-License-Identifier: BSD-2-Clause
+
+/*
+    DESCRIPTION:
+    SDS client connector image settings.
+
+    A barebones Windows 11 image carrying the tools needed to reach customer environments. No
+    Horizon agents; the OS Optimization Tool still runs, and the result is a sysprepped vSphere
+    template.
+
+    This is the single place to control what goes on the image: where the installers come from and
+    which applications are installed.
+
+    Copied to config/sds.pkrvars.hcl by ./config.sh.
+*/
+
+// ---------------------------------------------------------------------------
+// Installer source
+// ---------------------------------------------------------------------------
+// Auto       Tries Datastore first (no credentials needed), then Smb, then Nfs.
+// Smb        sds_source_path is a UNC path.
+// Nfs        sds_source_path is host:/export/path.
+// Datastore  Scans attached CD/DVD drives for an ISO containing the installers.
+
+sds_source_type = "Nfs"
+
+// SMB example: "\\\\fileserver.example.com\\software\\sds"
+// NFS example: "fileserver.example.com:/volume1/software/sds"
+sds_source_path     = ""
+sds_source_username = ""
+
+// Leave empty and export PKR_VAR_sds_source_password instead, so the credential stays out of this
+// file. It reaches the guest as an environment variable, never on a command line.
+sds_source_password = ""
+
+// NFS only. The Windows NFS client mounts with -o anon and presents UID -2 (4294967294) by
+// default -- not the Linux nobody (65534). An export whose files are owned by a specific UID
+// rejects that, and the symptom is misleading: the mount succeeds and the tree then reads as
+// "Access to the path is denied" with zero files enumerated. Check the owning UID with `ls -ln`.
+sds_source_anon_uid = ""
+sds_source_anon_gid = ""
+
+// ---------------------------------------------------------------------------
+// Applications
+// ---------------------------------------------------------------------------
+// Installed in the order listed. Each entry:
+//
+//   name      Display name, used in logs and the summary.
+//   pattern   Filename pattern matched against the source tree, not an exact version. Where
+//             several files match, the highest file version wins -- so dropping a newer installer
+//             onto the share is picked up with no change here.
+//   type      "msi" is handed to msiexec (/i "<path>" <args> /l*v <log>); "exe" is run directly.
+//   args      Silent-install arguments.
+//   detect    Optional. Skips the install when already satisfied, which makes a re-run against a
+//             partially built image safe. A path, or svc:<service>, or reg:<registry path>.
+//   required  Optional. When true a missing installer fails the build; otherwise it warns and the
+//             build continues, so a share short one application still yields an image.
+//
+// VERIFY THESE AGAINST YOUR OWN DOWNLOADS before the first build. Vendor filenames change between
+// releases, and silent-install switches are not always what the documentation claims -- the
+// Horizon Agent in this same repository rejects a switch its own usage text implies is valid, and
+// fails by printing a usage dialog rather than by erroring usefully. A wrong pattern is cheap (it
+// warns and skips); a wrong argument string can cost a whole build.
+
+sds_applications = [
+  {
+    name     = "Notepad++"
+    pattern  = "notepadplusplus"   // Chocolatey package id, not a filename
+    type     = "choco"
+    args     = "-y --no-progress"
+    detect   = "C:\\Program Files\\Notepad++\\notepad++.exe"
+    required = false
+  },
+  {
+    name     = "PuTTY"
+    pattern  = "putty"              // Chocolatey package id
+    type     = "choco"
+    args     = "-y --no-progress"
+    detect   = "C:\\Program Files\\PuTTY\\putty.exe"
+    required = false
+  },
+  {
+    name     = "Devolutions Remote Desktop Manager"
+    pattern  = "rdm"                // Chocolatey package id
+    type     = "choco"
+    args     = "-y --no-progress"
+    detect   = "C:\\Program Files\\Devolutions\\Remote Desktop Manager\\RemoteDesktopManager.exe"
+    required = false
+  },
+  {
+    name     = "1Password"
+    pattern  = "1password"          // Chocolatey package id
+    type     = "choco"
+    args     = "-y --no-progress"
+    // 1Password 8 for Windows installs per-user by default, into %LOCALAPPDATA%\\1Password. In an
+    // image built as the packer account that lands in packer's profile and is NOT there for the
+    // users of a clone. Verify after a build: if it is per-user, deploy it per-VM instead, or use
+    // 1Password's machine-wide MSI. This detect path assumes a machine-wide install.
+    detect   = "C:\\Program Files\\1Password\\app\\8\\1Password.exe"
+    required = false
+  },
+  {
+    name     = "1Password CLI"
+    pattern  = "op"                 // Chocolatey package id for the 1Password CLI
+    type     = "choco"
+    args     = "-y --no-progress"
+    // Chocolatey shims console tools into its bin directory, which is on the machine PATH, so
+    // this one is genuinely machine-wide unlike the desktop app above.
+    detect   = "C:\\ProgramData\\chocolatey\\bin\\op.exe"
+    required = false
+  },
+  {
+    name     = "FortiClient VPN"
+    pattern  = "FortiClientVPN*.msi"
+    type     = "msi"
+    args     = "/qn REBOOT=ReallySuppress"
+    detect   = "svc:FA_Scheduler"
+    required = false
+  },
+  {
+    name     = "Palo Alto GlobalProtect"
+    pattern  = "GlobalProtect64*.msi"
+    type     = "msi"
+    args     = "/qn REBOOT=ReallySuppress"
+    detect   = "svc:PanGPS"
+    required = false
+  },
+  {
+    name     = "Cisco Secure Client (AnyConnect)"
+    pattern  = "*core-vpn-predeploy-k9.msi"
+    type     = "msi"
+    args     = "/qn REBOOT=ReallySuppress PRE_DEPLOY_DISABLE_VPN=0"
+    detect   = "svc:csc_vpnagent"
+    required = false
+  },
+]
+
+// ---------------------------------------------------------------------------
+// OS Optimization Tool
+// ---------------------------------------------------------------------------
+// The same tool the Horizon images use. A connector image benefits from the same trimming even
+// though nothing on it is a Horizon agent.
+
+sds_osot_enabled = true
+
+sds_osot_path               = "C:\\Tools\\OSOT"
+sds_osot_pattern            = "*OSOptimizationTool*.exe"
+// OSOT accepts only all-item or no-item. "recommended" is an item category inside a template,
+// not a command-line value; OSOT answers an invalid value with "Invalid arguments" and exits 0.
+sds_osot_optimization_level = "all-item"
+
+// Optimization template passed as -t. Leave empty for the tool's default.
+sds_osot_template = ""
+
+// Stage OSOT from the installer source before optimizing. Set false when it is already in the
+// image or a wrapper script stages it.
+sds_osot_stage_from_source = true
+
+// Comma-separated OSOT finalize step numbers.
+//
+// Do NOT set this to "all". The full finalize set includes a step that releases the IP address.
+// Under Packer that severs Windows Remote Management and the build stalls at the connection
+// timeout with no output explaining why. The default covers the two documented steps:
+//   0  Native Image Generator (NGEN) .NET precompile
+//   1  DISM side-by-side component cleanup
+sds_osot_finalize_steps = "0,1"
+
+// Optional site-supplied OSOT wrapper, invoked as
+// -Action <Optimize|Finalize|Generalize> -OSOTPath <path> -NonInteractive.
+sds_osot_wrapper_script = ""
