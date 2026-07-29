@@ -509,7 +509,7 @@ Write-Step "$($applications.Count) application(s) to install: $(($applications |
 
 # Chocolatey entries carry a package id in 'pattern', not a filename, so they neither contribute
 # a search pattern nor need an installer source. An all-choco list skips source resolution.
-$fileApplications = @($applications | Where-Object { $_.type -ne 'choco' })
+$fileApplications = @($applications | Where-Object { $_.type -notin @('choco', 'psmodule') })
 $root = $null
 if ($fileApplications.Count -gt 0) {
     $root = Resolve-InstallerSource -Patterns @($fileApplications | ForEach-Object { $_.pattern })
@@ -532,6 +532,31 @@ foreach ($app in $applications) {
     if (Test-AlreadyInstalled -Detect $app.detect) {
         Write-Step "$name -- already installed." -Status SKIP
         Add-Result -Name $name -Status 'Skipped' -Detail 'already installed'
+        continue
+    }
+
+    if ($app.type -eq 'psmodule') {
+        # PowerShell Gallery modules -- PowerCLI and friends. 'pattern' holds the module name.
+        # Installed for AllUsers so it is available to every account on the image, not just the
+        # build account whose profile disappears with it.
+        $logFile = Join-Path $LogPath (($name -replace '[^\w]', '-') + '.log')
+        try {
+            Write-Step "$name -- installing PowerShell module $($app.pattern) (this can take a while)" -Status RUN
+            if (-not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
+                Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope AllUsers | Out-Null
+            }
+            if ((Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue).InstallationPolicy -ne 'Trusted') {
+                Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+            }
+            Install-Module -Name $app.pattern -Scope AllUsers -Force -AllowClobber -ErrorAction Stop 4>&1 |
+                Out-File -FilePath $logFile -Append
+            Write-Step "$name installed." -Status OK
+            Add-Result -Name $name -Status 'Installed' -Detail 'PowerShell Gallery'
+        }
+        catch {
+            Write-Step "$name failed: $($_.Exception.Message)" -Status FAIL
+            Add-Result -Name $name -Status $(if ($app.required) { 'Failed' } else { 'Missing' }) -Detail $_.Exception.Message
+        }
         continue
     }
 

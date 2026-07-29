@@ -112,6 +112,35 @@ sds_applications = [
     required = false
   },
   {
+    name     = "RVTools"
+    pattern  = "rvtools"            // Chocolatey package id -- newer than the MSI on the share
+    type     = "choco"
+    args     = "-y --no-progress"
+    detect   = "C:\\Program Files (x86)\\Robware\\RVTools\\RVTools.exe"
+    required = false
+  },
+  {
+    name     = "VCF PowerCLI"
+    pattern  = "vcf-powercli-psmodule"   // Chocolatey package id; PowerCLI 13.x became VCF 9.x
+    type     = "choco"
+    args     = "-y --no-progress"
+    // No detect path: the module's install location varies by package version, and choco is
+    // already idempotent -- a second run reports it as installed and exits 0.
+    detect   = ""
+    required = false
+  },
+  {
+    name     = "Dell OpenManage DRAC Tools (RACADM)"
+    // Staged on the share like the VPN clients: Dell's download URL is behind Akamai and answers
+    // 403 to anything that is not a browser, and there is no Chocolatey package. Drop the
+    // installer in the source tree and this picks it up by pattern.
+    pattern  = "OM-DRAC-Dell-Web-WINX64-*.exe"
+    type     = "exe"
+    args     = "/s"
+    detect   = "C:\\Program Files\\Dell\\SysMgt\\rac5\\racadm.exe"
+    required = false
+  },
+  {
     name     = "FortiClient VPN"
     pattern  = "FortiClientVPN*.msi"
     type     = "msi"

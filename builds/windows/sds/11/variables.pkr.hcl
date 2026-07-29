@@ -550,6 +550,37 @@ variable "sds_source_anon_gid" {
   default     = ""
 }
 
+variable "sds_operator_username" {
+  type        = string
+  description = "Local operator account created on the image. Leave empty to create none."
+  default     = ""
+}
+
+variable "sds_operator_password" {
+  type        = string
+  description = "Password for the operator account. Do not assign it in a var-file: var-files outrank PKR_VAR_ environment variables. Export PKR_VAR_sds_operator_password instead."
+  default     = ""
+  sensitive   = true
+}
+
+variable "sds_operator_fullname" {
+  type        = string
+  description = "Full name shown for the operator account."
+  default     = "SDS Operator"
+}
+
+variable "sds_dark_mode" {
+  type        = bool
+  description = "Set the default profile, and so every account created afterwards, to dark mode."
+  default     = true
+}
+
+variable "sds_taskbar_pins" {
+  type        = list(string)
+  description = "Applications to pin to the taskbar, in order. Matched against Start Menu shortcut names, so a pin follows the application wherever it installed itself. Pinning anything replaces the Windows defaults, which is how Store and Copilot leave the taskbar."
+  default     = ["Notepad++", "Remote Desktop Manager", "1Password", "FortiClient", "GlobalProtect", "Cisco Secure Client"]
+}
+
 variable "sds_applications" {
   type = list(object({
     name     = string

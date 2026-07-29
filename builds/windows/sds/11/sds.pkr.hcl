@@ -14,7 +14,8 @@
     Provisioner order is load bearing:
 
       source check -> ansible -> [NFS client + restart] -> stage OSOT -> OSOT Optimize
-      -> applications -> AppX cleanup -> OSOT Finalize -> OSOT Generalize
+      -> applications -> desktop and operator account -> AppX cleanup -> OSOT Finalize
+      -> OSOT Generalize
 
     OSOT Generalize is Sysprep. It wipes the autologon, resets Windows Remote Management, and
     returns the guest to OOBE, so Packer cannot reconnect afterwards -- it has to be last, which is
@@ -103,6 +104,14 @@ locals {
     "SDS_APPLICATIONS=${jsonencode(var.sds_applications)}",
     "SDS_OSOT_PATH=${var.sds_osot_path}",
     "SDS_OSOT_PATTERN=${var.sds_osot_pattern}",
+  ]
+
+  desktop_env = [
+    "SDS_OPERATOR_USERNAME=${var.sds_operator_username}",
+    "SDS_OPERATOR_PASSWORD=${var.sds_operator_password}",
+    "SDS_OPERATOR_FULLNAME=${var.sds_operator_fullname}",
+    "SDS_DARK_MODE=${var.sds_dark_mode ? "1" : "0"}",
+    "SDS_TASKBAR_PINS=${join(",", var.sds_taskbar_pins)}",
   ]
 
   // The Windows NFS client installs a redirector driver that is not usable until the guest
@@ -348,6 +357,17 @@ build {
 
   provisioner "windows-restart" {
     restart_timeout = "30m"
+  }
+
+  //  Operator account, dark mode, and the taskbar. Runs after the applications because the pins
+  //  are resolved by finding each application's Start Menu shortcut -- nothing to find until they
+  //  are installed. Per-user settings are written to the DEFAULT profile, so the operator account
+  //  and anything created after deployment inherit them; settings written to the build account's
+  //  profile would vanish with it.
+  provisioner "powershell" {
+    script           = "${path.cwd}/scripts/windows/sds-desktop.ps1"
+    environment_vars = local.desktop_env
+    valid_exit_codes = [0]
   }
 
   //  Remove the packages that Windows reprovisions and that block Sysprep. Done here rather than
