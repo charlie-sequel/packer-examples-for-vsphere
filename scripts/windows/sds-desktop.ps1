@@ -49,10 +49,12 @@ param(
         '1Password',
         'FortiClient',
         'GlobalProtect',
-        'Cisco Secure Client'
+        'AnyConnect',
+        'RVTools'
     ),
 
     [switch]$DarkMode,
+    [switch]$BlackBackground,
     [string]$LogPath = 'C:\Windows\Temp\sds-desktop'
 )
 
@@ -70,6 +72,9 @@ foreach ($map in @(
 }
 if (-not $PSBoundParameters.ContainsKey('DarkMode') -and $env:SDS_DARK_MODE -in @('1', 'true', 'True')) {
     $DarkMode = [switch]$true
+}
+if (-not $PSBoundParameters.ContainsKey('BlackBackground') -and $env:SDS_BLACK_BACKGROUND -in @('1', 'true', 'True')) {
+    $BlackBackground = [switch]$true
 }
 if (-not $PSBoundParameters.ContainsKey('TaskbarPins') -and $env:SDS_TASKBAR_PINS) {
     $TaskbarPins = $env:SDS_TASKBAR_PINS -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }
@@ -121,6 +126,47 @@ if ($OperatorUsername) {
 }
 
 #endregion
+#region Black wallpaper
+
+# A real image, written once to a machine path so every profile can reach it.
+$script:BlackWallpaper = 'C:\Windows\Web\Wallpaper\Windows\sds-black.bmp'
+if ($BlackBackground) {
+    try {
+        $dir = Split-Path $script:BlackWallpaper
+        if (-not (Test-Path $dir)) { New-Item -Path $dir -ItemType Directory -Force | Out-Null }
+        # Built byte by byte rather than with System.Drawing: GDI+ is not guaranteed to be
+        # present, and a failure there would leave the desktop on its default wallpaper. A 4x4
+        # image is enough -- WallpaperStyle 2 stretches it to any resolution.
+        $width = 4; $height = 4
+        $rowBytes = [Math]::Ceiling($width * 3 / 4) * 4
+        $pixelBytes = $rowBytes * $height
+        $bytes = New-Object System.Collections.Generic.List[byte]
+        $bytes.AddRange([byte[]]@(0x42, 0x4D))
+        $bytes.AddRange([BitConverter]::GetBytes([int](54 + $pixelBytes)))
+        $bytes.AddRange([BitConverter]::GetBytes([int]0))
+        $bytes.AddRange([BitConverter]::GetBytes([int]54))
+        $bytes.AddRange([BitConverter]::GetBytes([int]40))
+        $bytes.AddRange([BitConverter]::GetBytes([int]$width))
+        $bytes.AddRange([BitConverter]::GetBytes([int]$height))
+        $bytes.AddRange([BitConverter]::GetBytes([int16]1))
+        $bytes.AddRange([BitConverter]::GetBytes([int16]24))
+        $bytes.AddRange([BitConverter]::GetBytes([int]0))
+        $bytes.AddRange([BitConverter]::GetBytes([int]$pixelBytes))
+        $bytes.AddRange([BitConverter]::GetBytes([int]2835))
+        $bytes.AddRange([BitConverter]::GetBytes([int]2835))
+        $bytes.AddRange([BitConverter]::GetBytes([int]0))
+        $bytes.AddRange([BitConverter]::GetBytes([int]0))
+        $bytes.AddRange([byte[]]::new($pixelBytes))   # all zero = black
+        [IO.File]::WriteAllBytes($script:BlackWallpaper, $bytes.ToArray())
+        Write-Step "Black wallpaper written to $script:BlackWallpaper" -Status OK
+    }
+    catch {
+        Write-Step "Could not create the black wallpaper: $($_.Exception.Message)" -Status WARN
+        $script:BlackWallpaper = ''
+    }
+}
+
+#endregion
 #region Default user profile
 
 # Per-user settings are applied by loading the default profile's hive and writing into it, so that
@@ -145,24 +191,74 @@ try {
     if ($loaded) { $userRoots += "Registry::HKEY_USERS\$mount" }
     $userRoots += 'HKCU:'
 
+    # Each of these is cosmetic. Not one is worth failing a build that has already installed every
+    # application -- and some values in the default hive are ACL-protected and simply refuse to be
+    # written. Set them individually and report what did not take.
+    function Set-UserValue {
+        param([string]$Key, [string]$Name, [int]$Value)
+        try {
+            if (-not (Test-Path $Key)) { New-Item -Path $Key -Force | Out-Null }
+            Set-ItemProperty -Path $Key -Name $Name -Value $Value -Type DWord -Force -ErrorAction Stop
+            return $true
+        }
+        catch {
+            Write-Step "could not set $Name : $($_.Exception.Message)" -Status WARN
+            return $false
+        }
+    }
+
+    function Set-UserString {
+        param([string]$Key, [string]$Name, [string]$Value)
+        try {
+            if (-not (Test-Path $Key)) { New-Item -Path $Key -Force | Out-Null }
+            Set-ItemProperty -Path $Key -Name $Name -Value $Value -Type String -Force -ErrorAction Stop
+            return $true
+        }
+        catch {
+            Write-Step "could not set $Name : $($_.Exception.Message)" -Status WARN
+            return $false
+        }
+    }
+
     foreach ($root in $userRoots) {
         if ($DarkMode) {
             $personalize = "$root\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
-            if (-not (Test-Path $personalize)) { New-Item -Path $personalize -Force | Out-Null }
-            Set-ItemProperty -Path $personalize -Name 'AppsUseLightTheme'   -Value 0 -Type DWord -Force
-            Set-ItemProperty -Path $personalize -Name 'SystemUsesLightTheme' -Value 0 -Type DWord -Force
+            [void](Set-UserValue -Key $personalize -Name 'AppsUseLightTheme'    -Value 0)
+            [void](Set-UserValue -Key $personalize -Name 'SystemUsesLightTheme' -Value 0)
         }
 
-        # Copilot and the Store: hide the buttons. The Copilot and Store packages themselves are
-        # removed elsewhere in the build; this is the taskbar chrome.
+        # Hide the Copilot button. The Copilot package itself is removed elsewhere in the build;
+        # this is the taskbar chrome.
         $advanced = "$root\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
-        if (-not (Test-Path $advanced)) { New-Item -Path $advanced -Force | Out-Null }
-        Set-ItemProperty -Path $advanced -Name 'ShowCopilotButton' -Value 0 -Type DWord -Force
-        # Search box down to an icon, and widgets off: both are noise on an operator desktop.
-        Set-ItemProperty -Path $advanced -Name 'TaskbarDa' -Value 0 -Type DWord -Force
+        [void](Set-UserValue -Key $advanced -Name 'ShowCopilotButton' -Value 0)
+
+        # Solid black desktop -- KNOWN NOT TO WORK, left in place because it is harmless.
+        #
+        # Neither clearing Wallpaper nor pointing it at a black bitmap survives first logon on
+        # Windows 11: the theme applied at that point re-asserts its own image and wins over both.
+        # The values below are set correctly and the bitmap is written; the desktop still comes up
+        # with the default wallpaper.
+        #
+        # What would actually work, if it ever matters enough: overwrite the theme's own image at
+        # C:\Windows\Web\Wallpaper\Windows\img0.jpg, or set the wallpaper POLICY value under
+        # ...\Policies\System\Wallpaper, which does outrank the theme. Deliberately not done --
+        # the setting is cosmetic and was not worth another hour of build cycles.
+        #
+        # (OSOT advertises -Background $HEX_COLOR for this, but 1.2.2603 rejects every value format
+        # tried, and a rejected argument voids its ENTIRE optimize run while still exiting 0.)
+        #
+        if ($BlackBackground) {
+            [void](Set-UserString -Key "$root\Control Panel\Desktop" -Name 'Wallpaper' -Value $script:BlackWallpaper)
+            [void](Set-UserString -Key "$root\Control Panel\Desktop" -Name 'WallpaperStyle' -Value '2')
+            [void](Set-UserString -Key "$root\Control Panel\Desktop" -Name 'TileWallpaper' -Value '0')
+            [void](Set-UserString -Key "$root\Control Panel\Colors" -Name 'Background' -Value '0 0 0')
+        }
+
     }
     if ($DarkMode) { Write-Step 'Dark mode set for the default profile and this account.' -Status OK }
-    Write-Step 'Copilot button and widgets hidden.' -Status OK
+    # The desktop background is OSOT's job -- see sds_osot_background. Setting it here as well
+    # would be two mechanisms racing over the same setting.
+    Write-Step 'Copilot button hidden.' -Status OK
 }
 finally {
     if ($loaded) {
@@ -174,9 +270,15 @@ finally {
 }
 
 # Machine-wide Copilot policy, which is what actually keeps it from coming back.
-$copilotPolicy = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsCopilot'
-if (-not (Test-Path $copilotPolicy)) { New-Item -Path $copilotPolicy -Force | Out-Null }
-Set-ItemProperty -Path $copilotPolicy -Name 'TurnOffWindowsCopilot' -Value 1 -Type DWord -Force
+try {
+    $copilotPolicy = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsCopilot'
+    if (-not (Test-Path $copilotPolicy)) { New-Item -Path $copilotPolicy -Force | Out-Null }
+    Set-ItemProperty -Path $copilotPolicy -Name 'TurnOffWindowsCopilot' -Value 1 -Type DWord -Force -ErrorAction Stop
+    Write-Step 'Copilot disabled by machine policy.' -Status OK
+}
+catch {
+    Write-Step "Could not set the Copilot policy: $($_.Exception.Message)" -Status WARN
+}
 
 #endregion
 #region Taskbar pins
@@ -203,7 +305,34 @@ foreach ($pin in $TaskbarPins) {
         $resolved += $match.FullName
     }
     else {
-        Write-Step "pin: $pin -- no Start Menu shortcut found, skipping" -Status WARN
+        # No shortcut: some installers (RVTools via Chocolatey, for one) drop an executable and
+        # never create one. Find the executable and make the shortcut, so the pin has a target.
+        $exe = $null
+        foreach ($base in @($env:ProgramFiles, ${env:ProgramFiles(x86)}, "$env:ProgramData\chocolatey\bin")) {
+            if (-not $base -or -not (Test-Path $base)) { continue }
+            $exe = Get-ChildItem -Path $base -Filter "*.exe" -Recurse -File -ErrorAction SilentlyContinue |
+                Where-Object { $_.BaseName -like "*$pin*" } |
+                Sort-Object { $_.BaseName.Length } | Select-Object -First 1
+            if ($exe) { break }
+        }
+        if ($exe) {
+            try {
+                $created = Join-Path "$env:ProgramData\Microsoft\Windows\Start Menu\Programs" "$pin.lnk"
+                $shell = New-Object -ComObject WScript.Shell
+                $link = $shell.CreateShortcut($created)
+                $link.TargetPath = $exe.FullName
+                $link.WorkingDirectory = $exe.DirectoryName
+                $link.Save()
+                Write-Step "pin: $pin -> created $created (installer left no shortcut)" -Status OK
+                $resolved += $created
+            }
+            catch {
+                Write-Step "pin: $pin -- found $($exe.FullName) but could not create a shortcut: $($_.Exception.Message)" -Status WARN
+            }
+        }
+        else {
+            Write-Step "pin: $pin -- no Start Menu shortcut and no matching executable, skipping" -Status WARN
+        }
     }
 }
 

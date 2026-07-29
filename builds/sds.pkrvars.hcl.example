@@ -116,7 +116,8 @@ sds_applications = [
     pattern  = "rvtools"            // Chocolatey package id -- newer than the MSI on the share
     type     = "choco"
     args     = "-y --no-progress"
-    detect   = "C:\\Program Files (x86)\\Robware\\RVTools\\RVTools.exe"
+    // Dell acquired Robware, so it installs under Dell\\RVTools now, not Robware\\RVTools.
+    detect   = "C:\\Program Files (x86)\\Dell\\RVTools\\RVTools.exe"
     required = false
   },
   {

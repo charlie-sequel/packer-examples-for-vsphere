@@ -575,10 +575,16 @@ variable "sds_dark_mode" {
   default     = true
 }
 
+variable "sds_black_background" {
+  type        = bool
+  description = "Solid black desktop instead of the default wallpaper."
+  default     = true
+}
+
 variable "sds_taskbar_pins" {
   type        = list(string)
   description = "Applications to pin to the taskbar, in order. Matched against Start Menu shortcut names, so a pin follows the application wherever it installed itself. Pinning anything replaces the Windows defaults, which is how Store and Copilot leave the taskbar."
-  default     = ["Notepad++", "Remote Desktop Manager", "1Password", "FortiClient", "GlobalProtect", "Cisco Secure Client"]
+  default     = ["Notepad++", "Remote Desktop Manager", "1Password", "RVTools", "FortiClient", "GlobalProtect", "AnyConnect"]
 }
 
 variable "sds_applications" {
@@ -592,6 +598,12 @@ variable "sds_applications" {
   }))
   description = "Applications to install, in order. Located by filename pattern rather than exact version. Every field is required: Packer's HCL2 has no optional() modifier, so give detect \"\" and required false when they do not apply."
   default     = []
+}
+
+variable "sds_osot_generalize" {
+  type        = bool
+  description = "Run OSOT Generalize (sysprep) at the end of the build. Off by default: OSOT's generalize requires the guest to be in Audit Mode, which these builds are not, so it refuses -- and it exits 0 while refusing, which read as success for every build until the output was checked. vSphere guest customization syspreps at deploy time anyway."
+  default     = false
 }
 
 variable "sds_osot_enabled" {

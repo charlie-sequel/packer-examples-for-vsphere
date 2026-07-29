@@ -111,6 +111,7 @@ locals {
     "SDS_OPERATOR_PASSWORD=${var.sds_operator_password}",
     "SDS_OPERATOR_FULLNAME=${var.sds_operator_fullname}",
     "SDS_DARK_MODE=${var.sds_dark_mode ? "1" : "0"}",
+    "SDS_BLACK_BACKGROUND=${var.sds_black_background ? "1" : "0"}",
     "SDS_TASKBAR_PINS=${join(",", var.sds_taskbar_pins)}",
   ]
 
@@ -375,7 +376,7 @@ build {
   provisioner "powershell" {
     inline = [
       "$ErrorActionPreference = 'Continue'",
-      "foreach ($pkg in @('Microsoft.Copilot', 'Microsoft.BingSearch')) {",
+      "foreach ($pkg in @('Microsoft.Copilot', 'Microsoft.BingSearch', 'Microsoft.OutlookForWindows')) {",
       "  Get-AppxPackage -Name $pkg -ErrorAction SilentlyContinue | Remove-AppxPackage -ErrorAction SilentlyContinue",
       "  $provisioned = Get-AppxProvisionedPackage -Online | Where-Object { $_.DisplayName -eq $pkg }",
       "  if ($provisioned) { Remove-AppxProvisionedPackage -Online -PackageName $provisioned.PackageName -ErrorAction SilentlyContinue | Out-Null }",
@@ -401,7 +402,7 @@ build {
     environment_vars = local.osot_env
     execute_command  = "powershell -ExecutionPolicy Bypass -NoProfile -Command \"& { . {{.Vars}}; & '{{.Path}}' -Action Generalize -Shutdown; exit $LastExitCode }\""
     valid_exit_codes = [0, 3010, 1, 259]
-    only             = var.sds_osot_enabled ? ["vsphere-iso.windows-sds"] : ["vsphere-iso.__disabled__"]
+    only             = var.sds_osot_enabled && var.sds_osot_generalize ? ["vsphere-iso.windows-sds"] : ["vsphere-iso.__disabled__"]
   }
 
   post-processor "manifest" {

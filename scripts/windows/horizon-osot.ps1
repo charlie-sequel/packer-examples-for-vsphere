@@ -77,6 +77,9 @@ param(
     [string]$OsotExecutable,
     [string]$Template,
 
+    # NOTE: OSOT's help advertises -Background $HEX_COLOR, but 1.2.2603 answers "Arguments for
+    # Background are not right" to every format tried -- and a rejected argument voids the ENTIRE
+    # optimize run while still exiting 0. The background is set from the desktop script instead.
     # The only values OSOT accepts for -optimize. 'all-item' selects every item in the default or
     # selected template; 'no-item' selects none. Categories such as "recommended" live inside the
     # templates, not on the command line -- to apply a subset, supply a template with -t.
@@ -244,8 +247,21 @@ if (Test-Path $consoleLog) {
         foreach ($line in ($console -split "`r?`n" | Where-Object { $_.Trim() })) {
             Write-Step "  $line" -Status Info
         }
-        if ($console -match 'Invalid arguments') {
-            throw "OSOT rejected the command line for $Action and did nothing. It exits 0 regardless, so this is detected from its output. Console: $consoleLog"
+        # OSOT exits 0 whether it worked or refused, so its own words are the only signal. Each of
+        # these has been observed: an unknown value for -optimize, a bad -Background format, and a
+        # generalize attempted outside audit mode. All three left the build reporting success while
+        # nothing had been done.
+        $rejections = @(
+            'Invalid arguments'
+            'are not right'
+            'not in Audit Mode'
+            'cant''t be finished'
+            "can't be finished"
+        )
+        foreach ($rejection in $rejections) {
+            if ($console -match [regex]::Escape($rejection)) {
+                throw "OSOT refused to perform $Action and did nothing: '$rejection'. It exits 0 regardless, so this is detected from its output. Console: $consoleLog"
+            }
         }
     }
 }
