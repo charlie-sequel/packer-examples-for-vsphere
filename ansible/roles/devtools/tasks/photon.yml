@@ -1,0 +1,78 @@
+---
+# VMware Photon OS install steps, mirroring docs/getting-started/requirements.md (Photon tab).
+# Photon has no apt-style repo for HashiCorp tools or gh -- those come from direct release
+# downloads (version-pinned for Packer/Terraform, since there's no feed to track "latest" from;
+# see devtools_packer_version/devtools_terraform_version in defaults/main.yml).
+
+- name: Install this repo's required tdnf packages
+  ansible.builtin.command: tdnf -y install ansible git jq xorriso wget unzip tar curl docker
+  changed_when: false
+
+- name: Start and enable the Docker daemon
+  ansible.builtin.systemd:
+    name: docker
+    state: started
+    enabled: true
+
+- name: Add the build user to the docker group
+  ansible.builtin.user:
+    name: "{{ build_username }}"
+    groups: docker
+    append: true
+
+- name: Install Packer
+  ansible.builtin.unarchive:
+    src: "https://releases.hashicorp.com/packer/{{ devtools_packer_version }}/packer_{{ devtools_packer_version }}_linux_amd64.zip"
+    dest: /usr/local/bin
+    remote_src: true
+    mode: "0755"
+
+- name: Install Terraform
+  ansible.builtin.unarchive:
+    src: "https://releases.hashicorp.com/terraform/{{ devtools_terraform_version }}/terraform_{{ devtools_terraform_version }}_linux_amd64.zip"
+    dest: /usr/local/bin
+    remote_src: true
+    mode: "0755"
+
+- name: Install gomplate
+  ansible.builtin.get_url:
+    url: "https://github.com/hairyhenderson/gomplate/releases/download/v{{ devtools_gomplate_version }}/gomplate_linux-amd64"
+    dest: /usr/local/bin/gomplate
+    mode: "0755"
+
+- name: Install yq
+  ansible.builtin.get_url:
+    url: https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+    dest: /usr/local/bin/yq
+    mode: "0755"
+
+- name: Install govc (vSphere CLI)
+  ansible.builtin.unarchive:
+    src: https://github.com/vmware/govmomi/releases/latest/download/govc_Linux_x86_64.tar.gz
+    dest: /usr/local/bin
+    remote_src: true
+    include:
+      - govc
+    mode: "0755"
+
+# gh CLI's release tarball has no version-independent "latest" asset name (the filename embeds
+# the version, unlike govc/yq above), so the latest tag is looked up first.
+
+- name: Look up the latest gh CLI release tag
+  ansible.builtin.uri:
+    url: https://api.github.com/repos/cli/cli/releases/latest
+    return_content: true
+  register: devtools_gh_release
+
+- name: Install gh CLI
+  ansible.builtin.shell: |
+    set -e
+    tag="{{ devtools_gh_release.json.tag_name }}"
+    ver="${tag#v}"
+    tmp="$(mktemp -d)"
+    curl -fsSL "https://github.com/cli/cli/releases/download/${tag}/gh_${ver}_linux_amd64.tar.gz" | tar -xz -C "$tmp"
+    install -m 0755 "$tmp/gh_${ver}_linux_amd64/bin/gh" /usr/local/bin/gh
+    rm -rf "$tmp"
+  args:
+    creates: /usr/local/bin/gh
+    executable: /bin/bash

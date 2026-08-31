@@ -5,3 +5,9 @@ devtools_task_name: Install the tools needed to work with this repo.
 # (docs/getting-started/requirements.md). govc, gh, and yq track their own "latest" release
 # instead, since they aren't pinned upstream.
 devtools_gomplate_version: "4.3.0"
+
+# Photon only: installed from a version-pinned HashiCorp release zip, since there's no apt-style
+# repo to track "latest" from the way the Ubuntu build does. Matches this repo's own minimum
+# version requirements (docs/getting-started/requirements.md) -- bump as needed.
+devtools_packer_version: "1.15.0"
+devtools_terraform_version: "1.10.0"
