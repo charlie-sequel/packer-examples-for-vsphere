@@ -1,0 +1,59 @@
+name: Upstream sync
+
+# Weekly check of vmware/packer-examples-for-vsphere (develop branch) for new commits.
+# Never merges automatically: pushes a sync branch and opens/refreshes a PR against
+# main so local modifications are reviewed before anything lands. Mirrors what
+# sync-upstream.sh --open-pr does locally, but runs in GitHub's cloud so it doesn't
+# depend on a laptop being on.
+
+on:
+  schedule:
+    - cron: "15 9 * * 1" # Monday 09:15 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch upstream develop
+        id: fetch
+        run: |
+          git remote add upstream https://github.com/vmware/packer-examples-for-vsphere.git
+          git fetch upstream develop
+
+          if git merge-base --is-ancestor upstream/develop main; then
+            echo "Already up to date with upstream."
+            echo "up_to_date=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "up_to_date=false" >> "$GITHUB_OUTPUT"
+          count="$(git rev-list --count main..upstream/develop)"
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          echo "$count new upstream commit(s) available."
+
+      - name: Push sync branch and open PR
+        if: steps.fetch.outputs.up_to_date == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          sha="$(git rev-parse upstream/develop)"
+          git push -f origin "$sha:refs/heads/automated/upstream-sync"
+
+          if [ -z "$(gh pr list --head automated/upstream-sync --state open --json number -q '.[0].number')" ]; then
+            gh pr create \
+              --base main \
+              --head automated/upstream-sync \
+              --title "Sync upstream: vmware/packer-examples-for-vsphere@develop" \
+              --body "Automated upstream sync (${{ steps.fetch.outputs.count }} new commit(s)). Review and merge; resolve conflicts if GitHub flags them."
+          else
+            echo "PR already open; branch refreshed."
+          fi
