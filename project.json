@@ -171,6 +171,44 @@
                     }
                 },
                 {
+                    "name": "sds-toolbox",
+                    "description": "SDS Toolbox",
+                    "enabled": "true",
+                    "publisher": {
+                        "name": "Sequel Data Systems",
+                        "url": "https://sequeldata.com"
+                    },
+                    "versions": {
+                        "24.04": [
+                            {
+                                "version": "24-04-LTS",
+                                "enabled": "true",
+                                "description": "Ubuntu Server 24.04 LTS with Packer, Terraform, Ansible, govc, git, gh, jq, yq, and Docker installed.",
+                                "architectures": [
+                                    {
+                                        "architecture": "amd64",
+                                        "download_link": "https://releases.ubuntu.com/releases/24.04.3/ubuntu-24.04.3-live-server-amd64.iso",
+                                        "checksum_algorithm": "sha256",
+                                        "checksum": "https://releases.ubuntu.com/releases/24.04.3/SHA256SUMS"
+                                    }
+                                ],
+                                "build_files": [
+                                    {
+                                        "vsphere": "vsphere.pkrvars.hcl",
+                                        "build": "build.pkrvars.hcl",
+                                        "ansible": "ansible.pkrvars.hcl",
+                                        "proxy": "proxy.pkrvars.hcl",
+                                        "common": "common.pkrvars.hcl",
+                                        "network": "network.pkrvars.hcl",
+                                        "storage": "linux-storage.pkrvars.hcl",
+                                        "sds": "sds-toolbox.pkrvars.hcl"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                },
+                {
                     "name": "rhel",
                     "description": "Red Hat Enterprise Linux",
                     "enabled": "true",

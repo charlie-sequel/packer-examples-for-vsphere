@@ -1,0 +1,7 @@
+---
+devtools_task_name: Install the tools needed to work with this repo.
+
+# Pinned to match the version this repo's own requirements documentation tests against
+# (docs/getting-started/requirements.md). govc, gh, and yq track their own "latest" release
+# instead, since they aren't pinned upstream.
+devtools_gomplate_version: "4.3.0"
