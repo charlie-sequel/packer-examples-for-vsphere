@@ -1,5 +1,5 @@
 ---
-- name: Playbook for the SDS toolbox server
+- name: Playbook for the Packer toolbox server
   become: true
   become_method: ansible.builtin.sudo
   debugger: never

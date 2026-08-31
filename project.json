@@ -171,8 +171,8 @@
                     }
                 },
                 {
-                    "name": "sds-toolbox",
-                    "description": "SDS Toolbox",
+                    "name": "packer",
+                    "description": "Packer",
                     "enabled": "true",
                     "publisher": {
                         "name": "Sequel Data Systems",
@@ -200,8 +200,7 @@
                                         "proxy": "proxy.pkrvars.hcl",
                                         "common": "common.pkrvars.hcl",
                                         "network": "network.pkrvars.hcl",
-                                        "storage": "linux-storage.pkrvars.hcl",
-                                        "sds": "sds-toolbox.pkrvars.hcl"
+                                        "storage": "linux-storage.pkrvars.hcl"
                                     }
                                 ]
                             }

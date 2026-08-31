@@ -4,12 +4,12 @@
 
 /*
     DESCRIPTION:
-    SDS toolbox server build variables.
+    Packer toolbox server build variables.
     Packer Plugin for VMware vSphere: 'vsphere-iso' builder.
 */
 
 // Guest Operating System Metadata
-vm_guest_os_name    = "sds-toolbox"
+vm_guest_os_name    = "packer"
 vm_guest_os_version = "24.04-lts"
 
 // Virtual Machine Guest Operating System Setting

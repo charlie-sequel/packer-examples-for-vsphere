@@ -1,7 +1,7 @@
 ---
 # Installs Packer, Terraform, Ansible, and the supporting tools needed to work with this repo.
-# Ubuntu/Debian only -- this role is wired into ansible/linux-sds-toolbox-playbook.yml, which only
-# ever runs against the Ubuntu-based sds-toolbox build. The install steps mirror
+# Ubuntu/Debian only -- this role is wired into ansible/linux-packer-playbook.yml, which only
+# ever runs against the Ubuntu-based packer build. The install steps mirror
 # docs/getting-started/requirements.md (Ubuntu tab) so this box matches what the docs tell a human
 # to do by hand.
 

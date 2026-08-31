@@ -4,7 +4,7 @@
 
 /*
     DESCRIPTION:
-    SDS toolbox server: Ubuntu Server 24.04 LTS with the tooling needed to work with this
+    Packer toolbox server: Ubuntu Server 24.04 LTS with the tooling needed to work with this
     repo installed (Packer, Terraform, Ansible, govc, git, gh, jq, yq, Docker).
     Packer Plugin for VMware vSphere: 'vsphere-iso' builder.
 */
@@ -85,7 +85,7 @@ locals {
 //  BLOCK: source
 //  Defines the builder configuration blocks.
 
-source "vsphere-iso" "linux-sds-toolbox" {
+source "vsphere-iso" "linux-packer" {
 
   // vCenter Server Endpoint Settings and Credentials
   vcenter_server      = var.vsphere_endpoint
@@ -205,13 +205,13 @@ source "vsphere-iso" "linux-sds-toolbox" {
 //  Defines the builders to run, provisioners, and post-processors.
 
 build {
-  sources = ["source.vsphere-iso.linux-sds-toolbox"]
+  sources = ["source.vsphere-iso.linux-packer"]
 
   provisioner "ansible" {
     user                   = var.build_username
     galaxy_file            = "${path.cwd}/ansible/linux-requirements.yml"
     galaxy_force_with_deps = true
-    playbook_file          = "${path.cwd}/ansible/linux-sds-toolbox-playbook.yml"
+    playbook_file          = "${path.cwd}/ansible/linux-packer-playbook.yml"
     roles_path             = "${path.cwd}/ansible/roles"
     ansible_env_vars = [
       "ANSIBLE_CONFIG=${path.cwd}/ansible/ansible.cfg"
