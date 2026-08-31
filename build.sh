@@ -788,7 +788,7 @@ select_build() {
     fi
 
     case "$dist" in
-    "Debian" | "Ubuntu Server" | "AlmaLinux OS" | "Rocky Linux" | "Oracle Linux" | "CentOS Stream" | "Fedora Server")
+    "Debian" | "Ubuntu Server" | "AlmaLinux OS" | "Rocky Linux" | "Oracle Linux" | "CentOS Stream" | "Fedora Server" | "SDS Toolbox")
         var_files=("vsphere_vars" "build_vars" "ansible_vars" "proxy_vars" "common_vars" "network_vars" "storage_vars" "BUILD_VARS")
         validate_linux_username "$config_path/build.pkrvars.hcl"
         printf "Starting the build of %s %s...\n\n" "$dist" "$version"
