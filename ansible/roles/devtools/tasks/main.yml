@@ -9,6 +9,23 @@
   ansible.builtin.debug:
     msg: "{{ devtools_task_name }}"
 
+# Ubuntu's cloud image mounts /tmp noexec. Packer downloads each plugin binary to $TMPDIR and
+# execs it there for a version handshake before installing it, so a noexec /tmp makes every
+# plugin install fail with "permission denied" -- which is fatal on a box whose whole purpose
+# is running Packer. Point TMPDIR somewhere on the root filesystem instead.
+
+- name: Create an exec-friendly TMPDIR
+  ansible.builtin.file:
+    path: /opt/tmp
+    state: directory
+    mode: "1777"
+
+- name: Set TMPDIR system-wide
+  ansible.builtin.lineinfile:
+    path: /etc/environment
+    regexp: "^TMPDIR="
+    line: TMPDIR=/opt/tmp
+
 # HashiCorp apt repository (Packer, Terraform).
 
 - name: Install prerequisite packages for adding apt repositories
