@@ -181,7 +181,7 @@
                     "versions": {
                         "24.04": [
                             {
-                                "version": "24-04-LTS",
+                                "version": "24.04",
                                 "enabled": "true",
                                 "description": "Ubuntu Server 24.04 LTS with Packer, Terraform, Ansible, govc, git, gh, jq, yq, and Docker installed.",
                                 "architectures": [
