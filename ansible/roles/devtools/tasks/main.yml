@@ -132,3 +132,12 @@
     include:
       - govc
     mode: "0755"
+
+# The repo is public, so a plain HTTPS clone needs no credentials on the box.
+
+- name: Clone this repo for the build user
+  become: true
+  become_user: "{{ build_username }}"
+  ansible.builtin.git:
+    repo: https://github.com/charlie-sequel/packer-examples-for-vsphere.git
+    dest: "/home/{{ build_username }}/packer-examples-for-vsphere"

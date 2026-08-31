@@ -584,7 +584,7 @@ variable "sds_black_background" {
 variable "sds_taskbar_pins" {
   type        = list(string)
   description = "Applications to pin to the taskbar, in order. Matched against Start Menu shortcut names, so a pin follows the application wherever it installed itself. Pinning anything replaces the Windows defaults, which is how Store and Copilot leave the taskbar."
-  default     = ["Notepad++", "Remote Desktop Manager", "1Password", "RVTools", "FortiClient", "GlobalProtect", "AnyConnect"]
+  default     = []
 }
 
 variable "sds_applications" {
