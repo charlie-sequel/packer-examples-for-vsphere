@@ -58,6 +58,7 @@ data "git-repository" "cwd" {}
 locals {
   build_by          = "Built by: HashiCorp Packer ${packer.version}"
   build_date        = formatdate("YYYY-MM-DD hh:mm ZZZ", timestamp())
+  build_date_short  = formatdate("YYYY-MM-DD", timestamp())
   build_version     = data.git-repository.cwd.head
   build_description = "SDS client connector image\nVersion: ${local.build_version}\nBuilt on: ${local.build_date}\n${local.build_by}"
   iso_paths = {
@@ -74,7 +75,7 @@ locals {
   // which says the wrong thing entirely. The build still records the git version in the manifest
   // and the notes; the name just does not carry it. Rebuilds replace the previous artifact, which
   // is what -force already assumes.
-  vm_name            = "${var.vm_guest_os_family}-sds-${var.vm_guest_os_version}"
+  vm_name            = "${var.vm_guest_os_family}-sds-${var.vm_guest_os_version}-${local.build_date_short}"
   bucket_name        = replace("${var.vm_guest_os_family}-sds-${var.vm_guest_os_version}", ".", "")
   bucket_description = "SDS client connector: ${var.vm_guest_os_family} ${var.vm_guest_os_name} ${var.vm_guest_os_version}"
 

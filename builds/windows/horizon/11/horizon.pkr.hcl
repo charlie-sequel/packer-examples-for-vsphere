@@ -65,6 +65,7 @@ data "git-repository" "cwd" {}
 locals {
   build_by          = "Built by: HashiCorp Packer ${packer.version}"
   build_date        = formatdate("YYYY-MM-DD hh:mm ZZZ", timestamp())
+  build_date_short  = formatdate("YYYY-MM-DD", timestamp())
   build_version     = data.git-repository.cwd.head
   build_description = "Omnissa Horizon golden image\nVersion: ${local.build_version}\nBuilt on: ${local.build_date}\n${local.build_by}"
   iso_paths = {
@@ -76,8 +77,8 @@ locals {
   manifest_path      = "${path.cwd}/manifests/"
   manifest_output    = "${local.manifest_path}${local.manifest_date}.json"
   ovf_export_path    = "${path.cwd}/artifacts/"
-  vm_name_instant    = "${var.vm_guest_os_family}-horizon-${var.vm_guest_os_version}-instant-${local.build_version}"
-  vm_name_template   = "${var.vm_guest_os_family}-horizon-${var.vm_guest_os_version}-template-${local.build_version}"
+  vm_name_instant    = "${var.vm_guest_os_family}-horizon-${var.vm_guest_os_version}-instant-${local.build_version}-${local.build_date_short}"
+  vm_name_template   = "${var.vm_guest_os_family}-horizon-${var.vm_guest_os_version}-template-${local.build_version}-${local.build_date_short}"
   bucket_name        = replace("${var.vm_guest_os_family}-horizon-${var.vm_guest_os_version}", ".", "")
   bucket_description = "Omnissa Horizon golden image: ${var.vm_guest_os_family} ${var.vm_guest_os_name} ${var.vm_guest_os_version}"
 

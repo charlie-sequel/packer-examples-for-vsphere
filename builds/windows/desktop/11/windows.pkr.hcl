@@ -40,6 +40,7 @@ data "git-repository" "cwd" {}
 locals {
   build_by          = "Built by: HashiCorp Packer ${packer.version}"
   build_date        = formatdate("YYYY-MM-DD hh:mm ZZZ", timestamp())
+  build_date_short  = formatdate("YYYY-MM-DD", timestamp())
   build_version     = data.git-repository.cwd.head
   build_description = "Version: ${local.build_version}\nBuilt on: ${local.build_date}\n${local.build_by}"
   iso_paths = {
@@ -51,8 +52,8 @@ locals {
   manifest_path      = "${path.cwd}/manifests/"
   manifest_output    = "${local.manifest_path}${local.manifest_date}.json"
   ovf_export_path    = "${path.cwd}/artifacts/"
-  vm_name_pro        = "${var.vm_guest_os_family}-${var.vm_guest_os_name}-${var.vm_guest_os_version}-${var.vm_guest_os_edition_pro}-${local.build_version}"
-  vm_name_ent        = "${var.vm_guest_os_family}-${var.vm_guest_os_name}-${var.vm_guest_os_version}-${var.vm_guest_os_edition_ent}-${local.build_version}"
+  vm_name_pro        = "${var.vm_guest_os_family}-${var.vm_guest_os_name}-${var.vm_guest_os_version}-${var.vm_guest_os_edition_pro}-${local.build_version}-${local.build_date_short}"
+  vm_name_ent        = "${var.vm_guest_os_family}-${var.vm_guest_os_name}-${var.vm_guest_os_version}-${var.vm_guest_os_edition_ent}-${local.build_version}-${local.build_date_short}"
   bucket_name        = replace("${var.vm_guest_os_family}-${var.vm_guest_os_name}-${var.vm_guest_os_version}", ".", "")
   bucket_description = "${var.vm_guest_os_family} ${var.vm_guest_os_name} ${var.vm_guest_os_version}"
 }
