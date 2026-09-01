@@ -524,6 +524,12 @@ build {
     extra_arguments = [
       "--extra-vars", "use_proxy=false",
       "--extra-vars", "ansible_connection=winrm",
+      // The Packer Ansible plugin writes ansible_shell_type=powershell into the inventory
+      // it generates for WinRM hosts. ansible-core 2.19 changed the winrm connection to
+      // require the cmd shell, and with powershell the command is no longer valid base64
+      // by the time it reaches -EncodedCommand, so every task fails on send_input.
+      // --extra-vars outranks inventory vars, so this wins.
+      "--extra-vars", "ansible_shell_type=cmd",
       "--extra-vars", "ansible_user=${var.build_username}",
       "--extra-vars", "ansible_password='${var.build_password}'",
       "--extra-vars", "ansible_port='${var.communicator_port}'",
