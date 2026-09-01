@@ -7,8 +7,11 @@
   hosts: all
   vars:
     enable_cloudinit: false
-    ansible_python_interpreter: auto
-    ansible_python_interpreter_fallback: ['python3.13', 'python3.12', 'python3.11', 'python3.10', 'python3.9', 'python3.8', '/usr/bin/python3', 'python3']
+    # Pin the unversioned symlink. Discovery would cache a versioned path
+    # (/usr/bin/python3.11 on Photon 5), and the OS update task later in this
+    # play replaces Python, leaving every subsequent module calling a binary
+    # that no longer exists. The package manager repoints this symlink.
+    ansible_python_interpreter: /usr/bin/python3
   roles:
     - base
     - users

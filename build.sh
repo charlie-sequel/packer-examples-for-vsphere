@@ -560,7 +560,10 @@ select_version() {
     print_title
     printf "\nSelect a version:\n\n"
     for i in "${!version_array[@]}"; do
-        printf "$((i + 1)): $dist ${version_array[$i]}\n"
+        version_label=$(jq -r --arg os "$os" --arg dist "$dist" --arg version "${version_array[$i]}" \
+            '.os[] | select(.name == $os) | .distributions[]? | select(.description == $dist) | .versions[$version][]? | .label // empty' \
+            "$json_path" 2>/dev/null | head -1)
+        printf "$((i + 1)): $dist ${version_label:-${version_array[$i]}}\n"
     done
     printf "\n"
     prompt_user
@@ -637,7 +640,9 @@ select_edition() {
 }
 
 select_build() {
-    if [[ "$dist" == *"Red Hat"* ]]; then
+    if [[ "$dist" == *"Packer"* ]]; then
+        dist_name="packer"
+    elif [[ "$dist" == *"Red Hat"* ]]; then
         dist_name="rhel"
     elif [[ "$dist" == *"SUSE"* ]]; then
         dist_name="sles"
@@ -776,7 +781,7 @@ select_build() {
     fi
 
     if [[ "$os" == *"Linux"* ]]; then
-        storage_vars=$(jq -r --arg os "$os" --arg dist "$dist" --arg version "$version" '.os[] | select(.name == $os) | .distributions[] | select(.description == $dist) | .versions | to_entries[] | .value[] | select(.version == $version) | .build_files[0].storage' "$json_path")
+        storage_vars=$(jq -r --arg os "$os" --arg dist "$dist" --arg version "$version" '.os[] | select(.name == $os) | .distributions[] | select(.description == $dist) | .versions | to_entries[] | .value[] | select(.version == $version) | .build_files[0].storage // empty' "$json_path")
     fi
 
     if [[ "$dist" == *"Red Hat"* ]]; then
@@ -795,7 +800,9 @@ select_build() {
         command="packer build -force -on-error=ask $debug_option"
 
         for var_file in "${var_files[@]}"; do
-            command+=" -var-file=\"$config_path/${!var_file}\""
+            var_value="${!var_file}"
+            [[ -z "$var_value" || "$var_value" == "null" ]] && continue
+            command+=" -var-file=\"$config_path/$var_value\""
         done
 
         command+=" \"$INPUT_PATH\""
@@ -815,7 +822,9 @@ select_build() {
         command="packer build -force -on-error=ask $debug_option"
 
         for var_file in "${var_files[@]}"; do
-            command+=" -var-file=\"$config_path/${!var_file}\""
+            var_value="${!var_file}"
+            [[ -z "$var_value" || "$var_value" == "null" ]] && continue
+            command+=" -var-file=\"$config_path/$var_value\""
         done
 
         command+=" \"$INPUT_PATH\""
@@ -828,14 +837,16 @@ select_build() {
 
         eval "$command"
         ;;
-    "VMware Photon OS" | "Packer (Photon)")
+    "VMware Photon OS")
         var_files=("vsphere_vars" "build_vars" "ansible_vars" "proxy_vars" "common_vars" "network_vars" "BUILD_VARS")
         validate_linux_username "$config_path/build.pkrvars.hcl"
         printf "Starting the build of %s %s...\n\n" "$dist" "$version"
         command="packer build -force -on-error=ask $debug_option"
 
         for var_file in "${var_files[@]}"; do
-            command+=" -var-file=\"$config_path/${!var_file}\""
+            var_value="${!var_file}"
+            [[ -z "$var_value" || "$var_value" == "null" ]] && continue
+            command+=" -var-file=\"$config_path/$var_value\""
         done
 
         command+=" \"$INPUT_PATH\""
@@ -855,7 +866,9 @@ select_build() {
         command="packer build -force -on-error=ask $debug_option"
 
         for var_file in "${var_files[@]}"; do
-            command+=" -var-file=\"$config_path/${!var_file}\""
+            var_value="${!var_file}"
+            [[ -z "$var_value" || "$var_value" == "null" ]] && continue
+            command+=" -var-file=\"$config_path/$var_value\""
         done
 
         command+=" \"$INPUT_PATH\""
@@ -879,7 +892,9 @@ select_build() {
             command+=" --only=vsphere-iso.windows-server-standard-dexp,vsphere-iso.windows-server-standard-core"
 
             for var_file in "${var_files[@]}"; do
-                command+=" -var-file=\"$config_path/${!var_file}\""
+                var_value="${!var_file}"
+            [[ -z "$var_value" || "$var_value" == "null" ]] && continue
+            command+=" -var-file=\"$config_path/$var_value\""
             done
 
             command+=" \"$INPUT_PATH\""
@@ -900,7 +915,9 @@ select_build() {
             command+=" --only vsphere-iso.windows-server-datacenter-dexp,vsphere-iso.windows-server-datacenter-core"
 
             for var_file in "${var_files[@]}"; do
-                command+=" -var-file=\"$config_path/${!var_file}\""
+                var_value="${!var_file}"
+            [[ -z "$var_value" || "$var_value" == "null" ]] && continue
+            command+=" -var-file=\"$config_path/$var_value\""
             done
 
             command+=" \"$INPUT_PATH\""
@@ -928,7 +945,9 @@ select_build() {
             command+=" --only vsphere-iso.windows-desktop-ent"
 
             for var_file in "${var_files[@]}"; do
-                command+=" -var-file=\"$config_path/${!var_file}\""
+                var_value="${!var_file}"
+            [[ -z "$var_value" || "$var_value" == "null" ]] && continue
+            command+=" -var-file=\"$config_path/$var_value\""
             done
 
             command+=" \"$INPUT_PATH\""
@@ -949,7 +968,9 @@ select_build() {
             command+=" --only vsphere-iso.windows-desktop-pro"
 
             for var_file in "${var_files[@]}"; do
-                command+=" -var-file=\"$config_path/${!var_file}\""
+                var_value="${!var_file}"
+            [[ -z "$var_value" || "$var_value" == "null" ]] && continue
+            command+=" -var-file=\"$config_path/$var_value\""
             done
 
             command+=" \"$INPUT_PATH\""
@@ -999,7 +1020,9 @@ select_build() {
         command+=" --only $horizon_sources"
 
         for var_file in "${var_files[@]}"; do
-            command+=" -var-file=\"$config_path/${!var_file}\""
+            var_value="${!var_file}"
+            [[ -z "$var_value" || "$var_value" == "null" ]] && continue
+            command+=" -var-file=\"$config_path/$var_value\""
         done
 
         command+=" \"$INPUT_PATH\""
