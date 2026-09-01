@@ -93,6 +93,9 @@
       - unzip
       - whois
       - python3-pip
+      # Ansible reaches Windows guests over WinRM through pywinrm. Without it every
+      # Windows build fails at Gathering Facts with "No module named 'winrm'".
+      - python3-winrm
     state: present
     update_cache: true
 

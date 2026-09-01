@@ -5,8 +5,16 @@
 # see devtools_packer_version/devtools_terraform_version in defaults/main.yml).
 
 - name: Install this repo's required tdnf packages
-  ansible.builtin.command: tdnf -y install ansible git jq xorriso wget unzip tar curl docker
+  ansible.builtin.command: tdnf -y install ansible git jq xorriso wget unzip tar curl docker python3-pip
   changed_when: false
+
+# Photon's repos carry no pywinrm package, unlike Debian's python3-winrm, so it comes from
+# pip. Ansible reaches Windows guests over WinRM through this module and without it every
+# Windows build fails at Gathering Facts with "No module named 'winrm'".
+- name: Install the Python WinRM client used for Windows builds
+  ansible.builtin.pip:
+    name: pywinrm
+    state: present
 
 - name: Start and enable the Docker daemon
   ansible.builtin.systemd:
