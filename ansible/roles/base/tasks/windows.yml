@@ -28,15 +28,11 @@
         name: chocolatey
         state: latest
 
-    - name: Installing additional packages using Chocolatey.
-      chocolatey.chocolatey.win_chocolatey:
-        name:
-          - googlechrome
-          - putty
-          - winscp
-          - 7zip
-        state: latest
-        ignore_checksums: true
+    # Chocolatey itself is installed above, but the base image deliberately ships no
+    # packages on top of it. This used to install googlechrome, putty, winscp and 7zip,
+    # and a single dropped connection to dl.google.com was enough to fail an entire
+    # image build. Anything that needs an application installs it itself --
+    # scripts/windows/sds-apps.ps1 already does exactly that for the SDS image.
 
 - name: Updating the operating system.
   ansible.windows.win_updates:
