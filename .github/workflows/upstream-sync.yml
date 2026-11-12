@@ -5,6 +5,10 @@ name: Upstream sync
 # main so local modifications are reviewed before anything lands. Mirrors what
 # sync-upstream.sh --open-pr does locally, but runs in GitHub's cloud so it doesn't
 # depend on a laptop being on.
+#
+# Uses the UPSTREAM_SYNC_TOKEN secret (a personal access token with Workflows
+# write access) because the built-in GITHUB_TOKEN can't push upstream changes
+# to files under .github/workflows/.
 
 on:
   schedule:
@@ -22,6 +26,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.UPSTREAM_SYNC_TOKEN }}
 
       - name: Fetch upstream develop
         id: fetch
@@ -43,7 +48,7 @@ jobs:
       - name: Push sync branch and open PR
         if: steps.fetch.outputs.up_to_date == 'false'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.UPSTREAM_SYNC_TOKEN }}
         run: |
           sha="$(git rev-parse upstream/develop)"
           git push -f origin "$sha:refs/heads/automated/upstream-sync"
