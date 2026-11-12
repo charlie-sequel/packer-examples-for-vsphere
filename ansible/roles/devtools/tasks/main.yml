@@ -1,0 +1,44 @@
+---
+# Installs Packer, Terraform, Ansible, and the supporting tools needed to work with this repo.
+# Wired into ansible/linux-packer-playbook.yml, which runs against both packer builds: Ubuntu
+# (builds/linux/packer/24.04) and VMware Photon OS (builds/linux/packer/5). Install steps mirror
+# docs/getting-started/requirements.md (Ubuntu / Photon tabs) so each box matches what the docs
+# tell a human to do by hand for that OS.
+
+- name: "{{ devtools_task_name }}"
+  ansible.builtin.debug:
+    msg: "{{ devtools_task_name }}"
+
+# Ubuntu's cloud image mounts /tmp noexec. Packer downloads each plugin binary to $TMPDIR and
+# execs it there for a version handshake before installing it, so a noexec /tmp makes every
+# plugin install fail with "permission denied" -- which is fatal on a box whose whole purpose
+# is running Packer. Point TMPDIR somewhere on the root filesystem instead.
+
+- name: Create an exec-friendly TMPDIR
+  ansible.builtin.file:
+    path: /opt/tmp
+    state: directory
+    mode: "1777"
+
+- name: Set TMPDIR system-wide
+  ansible.builtin.lineinfile:
+    path: /etc/environment
+    regexp: "^TMPDIR="
+    line: TMPDIR=/opt/tmp
+
+- name: "{{ devtools_task_name }}"
+  ansible.builtin.include_tasks: debian.yml
+  when: ansible_facts['os_family'] == 'Debian'
+
+- name: "{{ devtools_task_name }}"
+  ansible.builtin.include_tasks: photon.yml
+  when: ansible_facts['distribution'] == 'VMware Photon OS'
+
+# The repo is public, so a plain HTTPS clone needs no credentials on the box.
+
+- name: Clone this repo for the build user
+  become: true
+  become_user: "{{ build_username }}"
+  ansible.builtin.git:
+    repo: https://github.com/charlie-sequel/packer-examples-for-vsphere.git
+    dest: "/home/{{ build_username }}/packer-examples-for-vsphere"

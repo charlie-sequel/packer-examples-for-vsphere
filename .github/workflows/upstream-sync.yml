@@ -1,0 +1,67 @@
+name: Upstream sync
+
+# Weekly check of vmware/packer-examples-for-vsphere (develop branch) for new commits.
+# Never merges automatically: pushes a sync branch and opens/refreshes a PR against
+# main so local modifications are reviewed before anything lands. Mirrors what
+# sync-upstream.sh --open-pr does locally, but runs in GitHub's cloud so it doesn't
+# depend on a laptop being on.
+#
+# Uses the UPSTREAM_SYNC_TOKEN secret (a personal access token with Workflows
+# write access) because the built-in GITHUB_TOKEN can't push upstream changes
+# to files under .github/workflows/. The PR is created via the REST API because
+# GraphQL's createPullRequest rejects fine-grained tokens.
+
+on:
+  schedule:
+    - cron: "15 9 * * 1" # Monday 09:15 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.UPSTREAM_SYNC_TOKEN }}
+
+      - name: Fetch upstream develop
+        id: fetch
+        run: |
+          git remote add upstream https://github.com/vmware/packer-examples-for-vsphere.git
+          git fetch upstream develop
+
+          if git merge-base --is-ancestor upstream/develop main; then
+            echo "Already up to date with upstream."
+            echo "up_to_date=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "up_to_date=false" >> "$GITHUB_OUTPUT"
+          count="$(git rev-list --count main..upstream/develop)"
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          echo "$count new upstream commit(s) available."
+
+      - name: Push sync branch and open PR
+        if: steps.fetch.outputs.up_to_date == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.UPSTREAM_SYNC_TOKEN }}
+        run: |
+          sha="$(git rev-parse upstream/develop)"
+          git push -f origin "$sha:refs/heads/automated/upstream-sync"
+
+          open_pr="$(gh api "repos/${{ github.repository }}/pulls?head=${{ github.repository_owner }}:automated/upstream-sync&state=open" --jq '.[0].number // empty')"
+          if [ -z "$open_pr" ]; then
+            gh api "repos/${{ github.repository }}/pulls" \
+              -f base=main \
+              -f head=automated/upstream-sync \
+              -f title="Sync upstream: vmware/packer-examples-for-vsphere@develop" \
+              -f body="Automated upstream sync (${{ steps.fetch.outputs.count }}d merge; resolve conflicts if GitHub flags them." \
+              --jq '"Opened " + .html_url'
+          else
+            echo "PR #$open_pr already open; branch refreshed."
+          fi
