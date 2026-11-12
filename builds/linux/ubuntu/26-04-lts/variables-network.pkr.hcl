@@ -4,7 +4,7 @@
 
 /*
     DESCRIPTION:
-    Debian Linux 11 network variables.
+    Ubuntu Server 26.04 LTS network variables.
     Packer Plugin for VMware vSphere: 'vsphere-iso' builder.
 */
 

@@ -12,19 +12,19 @@
 //  The Packer configuration.
 
 packer {
-  required_version = ">= 1.15.0"
+  required_version = ">= 1.16.2"
   required_plugins {
     vsphere = {
       source  = "github.com/vmware/vsphere"
-      version = ">= 2.1.1"
+      version = ">= 2.5.1"
     }
     git = {
       source  = "github.com/ethanmdavidson/git"
-      version = ">= 0.6.5"
+      version = ">= 0.6.7"
     }
     ansible = {
       source  = "github.com/hashicorp/ansible"
-      version = ">= 1.1.4"
+      version = ">= 1.1.6"
     }
   }
 }
@@ -530,7 +530,7 @@ build {
       // by the time it reaches -EncodedCommand, so every task fails on send_input.
       // --extra-vars outranks inventory vars, so this wins.
       "--extra-vars", "ansible_shell_type=cmd",
-      "--extra-vars", "ansible_user=${var.build_username}",
+      "--extra-vars", "ansible_user='${var.build_username}'",
       "--extra-vars", "ansible_password='${var.build_password}'",
       "--extra-vars", "ansible_port='${var.communicator_port}'",
       "--extra-vars", "build_username='${var.build_username}'",

@@ -31,9 +31,9 @@ menu:
           var_files:
             - "network.pkrvars.hcl"
             - "linux-storage.pkrvars.hcl"
-      - entry: "Debian 11"
+      - entry: "Ubuntu Server 26.04 LTS"
         build:
-          path: "builds/linux/debian/11/"
+          path: "builds/linux/ubuntu/26-04-lts/"
           var_files:
             - "network.pkrvars.hcl"
             - "linux-storage.pkrvars.hcl"
@@ -66,13 +66,6 @@ menu:
       - entry: "Red Hat Enterprise Linux 8"
         build:
           path: "builds/linux/rhel/8/"
-          var_files:
-            - "network.pkrvars.hcl"
-            - "linux-storage.pkrvars.hcl"
-            - "rhsm.pkrvars.hcl"
-      - entry: "Red Hat Enterprise Linux 7"
-        build:
-          path: "builds/linux/rhel/7/"
           var_files:
             - "network.pkrvars.hcl"
             - "linux-storage.pkrvars.hcl"
@@ -143,9 +136,9 @@ menu:
           var_files:
             - "network.pkrvars.hcl"
             - "linux-storage.pkrvars.hcl"
-      - entry: "Fedora Server 43"
+      - entry: "Fedora Server 45"
         build:
-          path: "builds/linux/fedora/43/"
+          path: "builds/linux/fedora/45/"
           var_files:
             - "network.pkrvars.hcl"
             - "linux-storage.pkrvars.hcl"
@@ -153,6 +146,7 @@ menu:
         build:
           path: "builds/linux/sles/15/"
           var_files:
+            - "network.pkrvars.hcl"
             - "scc.pkrvars.hcl"
 
   - entry: "Microsoft Windows"

@@ -17,7 +17,7 @@ All examples are provided in the HashiCorp Configuration Language ("HCL").
 
 This project supports the following guest operating systems:
 
-## :material-linux: Linux Distributions
+## :fontawesome-brands-linux: Linux Distributions
 
 ::spantable::
 | Operating System                                           | Version | Customization: VMTools             | Customization: cloud-init          | Network: DHCP or Static            | Storage: Customize                 |
@@ -26,10 +26,9 @@ This project supports the following guest operating systems:
 |                                                            | 4.0     | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-x-circle-16:{.red}       |
 | :fontawesome-brands-debian: Debian @span                   | 13      | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} |
 |                                                            | 12      | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} |
-|                                                            | 11      | :octicons-check-circle-16:{.green} | :octicons-x-circle-16:{.red}       | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} |
-| :fontawesome-brands-ubuntu: Ubuntu Server @span            | 24.04   | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} |
+| :fontawesome-brands-ubuntu: Ubuntu Server @span            | 26.04   | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} |
+|                                                            | 24.04   | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} |
 |                                                            | 22.04   | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} |
-|                                                            | 20.04   | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} |
 | :fontawesome-brands-redhat: Red Hat Enterprise Linux @span | 10      | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} |
 |                                                            | 9       | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} |
 |                                                            | 8       | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} |
@@ -39,12 +38,12 @@ This project supports the following guest operating systems:
 | :simple-rockylinux: Rocky Linux @span                      | 10      | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} |
 |                                                            | 9       | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} |
 |                                                            | 8       | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} |
-| :simple-oracle: Oracle Linux @span                         | 10      | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} |
+| :fontawesome-brands-linux: Oracle Linux @span              | 10      | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} |
 |                                                            | 9       | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} |
 |                                                            | 8       | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} |
 | :fontawesome-brands-centos: CentOS Stream @span            | 10      | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} |
 |                                                            | 9       | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} |
-| :fontawesome-brands-fedora: Fedora Server @span            | 43      | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} |
+| :fontawesome-brands-fedora: Fedora Server @span            | 45      | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} |
 | :fontawesome-brands-suse: SUSE Linux Enterprise @span      | 15      | :octicons-check-circle-16:{.green} | :octicons-check-circle-16:{.green} | :octicons-x-circle-16:{.red}       | :octicons-x-circle-16:{.red}       |
 ::end-spantable::
 
@@ -53,9 +52,9 @@ This project supports the following guest operating systems:
 ::spantable::
 | Operating System                                            | Version       | Editions                 | Experience    |
 | :---                                                        | :---          | :---                     | :---          |
-| :fontawesome-brands-windows: Microsoft Windows Server @span | 2025 @span    | Standard, Enterprise     | Core, Desktop |
-|                                                             | 2022 @span    | Standard, Enterprise     | Core, Desktop |
-|                                                             | 2019 @span    | Standard, Enterprise     | Core, Desktop |
+| :fontawesome-brands-windows: Microsoft Windows Server @span | 2025 @span    | Standard, Datacenter     | Core, Desktop |
+|                                                             | 2022 @span    | Standard, Datacenter     | Core, Desktop |
+|                                                             | 2019 @span    | Standard, Datacenter     | Core, Desktop |
 | :fontawesome-brands-windows: Microsoft Windows @span        | 11 @span      | Professional, Enterprise | -             |
 ::end-spantable::
 

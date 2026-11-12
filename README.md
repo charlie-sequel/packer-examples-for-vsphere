@@ -29,8 +29,8 @@ This project supports the following guest operating systems:
 |                              | 4         |
 | Debian                       | 13        |
 |                              | 12        |
-|                              | 11        |
-| Ubuntu Server                | 24.04 LTS |
+| Ubuntu Server                | 26.04 LTS |
+|                              | 24.04 LTS |
 |                              | 22.04 LTS |
 | Red Hat Enterprise Linux     | 10        |
 |                              | 9         |
@@ -46,7 +46,7 @@ This project supports the following guest operating systems:
 |                              | 8         |
 | CentOS Stream                | 10        |
 |                              | 9         |
-| Fedora Server                | 43        |
+| Fedora Server                | 45        |
 | SUSE Linux Enterprise Server | 15        |
 
 ## Microsoft Windows

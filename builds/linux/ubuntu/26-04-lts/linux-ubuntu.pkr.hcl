@@ -4,7 +4,7 @@
 
 /*
     DESCRIPTION:
-    Fedora Server 43 build definition.
+    Ubuntu Server 26.04 LTS build definition.
     Packer Plugin for VMware vSphere: 'vsphere-iso' builder.
 */
 
@@ -12,19 +12,19 @@
 //  The Packer configuration.
 
 packer {
-  required_version = ">= 1.15.0"
+  required_version = ">= 1.16.2"
   required_plugins {
     vsphere = {
       source  = "github.com/vmware/vsphere"
-      version = ">= 2.1.1"
+      version = ">= 2.5.1"
     }
     ansible = {
       source  = "github.com/hashicorp/ansible"
-      version = ">= 1.1.4"
+      version = ">= 1.1.6"
     }
     git = {
       source  = "github.com/ethanmdavidson/git"
-      version = ">= 0.6.5"
+      version = ">= 0.6.7"
     }
   }
 }
@@ -52,14 +52,14 @@ locals {
   manifest_output = "${local.manifest_path}${local.manifest_date}.json"
   ovf_export_path = "${path.cwd}/artifacts/${local.vm_name}"
   data_source_content = {
-    "/ks.cfg" = templatefile("${abspath(path.root)}/data/ks.pkrtpl.hcl", {
+    "/meta-data" = file("${abspath(path.root)}/data/meta-data")
+    "/user-data" = templatefile("${abspath(path.root)}/data/user-data.pkrtpl.hcl", {
       build_username           = var.build_username
       build_password           = var.build_password
       build_password_encrypted = var.build_password_encrypted
       vm_guest_os_language     = var.vm_guest_os_language
       vm_guest_os_keyboard     = var.vm_guest_os_keyboard
       vm_guest_os_timezone     = var.vm_guest_os_timezone
-      vm_guest_os_cloudinit    = var.vm_guest_os_cloudinit
       network = templatefile("${abspath(path.root)}/data/network.pkrtpl.hcl", {
         device  = var.vm_network_device
         ip      = var.vm_ip_address
@@ -73,10 +73,10 @@ locals {
         partitions = var.vm_disk_partitions
         lvm        = var.vm_disk_lvm
       })
-      additional_packages = join(" ", var.additional_packages)
+      additional_packages = var.additional_packages
     })
   }
-  data_source_command = var.common_data_source == "http" ? "inst.ks=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ks.cfg" : "inst.ks=cdrom:/ks.cfg"
+  data_source_command = var.common_data_source == "http" ? "ds=\"nocloud-net;seedfrom=http://{{.HTTPIP}}:{{.HTTPPort}}/\"" : "ds=\"nocloud\""
   vm_name             = "${var.vm_guest_os_family}-${var.vm_guest_os_name}-${var.vm_guest_os_version}-${local.build_version}-${local.build_date_short}"
   bucket_name         = replace("${var.vm_guest_os_family}-${var.vm_guest_os_name}-${var.vm_guest_os_version}", ".", "")
   bucket_description  = "${var.vm_guest_os_family} ${var.vm_guest_os_name} ${var.vm_guest_os_version}"
@@ -85,7 +85,7 @@ locals {
 //  BLOCK: source
 //  Defines the builder configuration blocks.
 
-source "vsphere-iso" "linux-fedora" {
+source "vsphere-iso" "linux-ubuntu" {
 
   // vCenter Server Endpoint Settings and Credentials
   vcenter_server      = var.vsphere_endpoint
@@ -131,6 +131,7 @@ source "vsphere-iso" "linux-fedora" {
   iso_paths    = var.common_iso_content_library_enabled ? [local.iso_paths.content_library] : [local.iso_paths.datastore]
   http_content = var.common_data_source == "http" ? local.data_source_content : null
   cd_content   = var.common_data_source == "disk" ? local.data_source_content : null
+  cd_label     = var.common_data_source == "disk" ? "cidata" : null
 
   // Boot and Provisioning Settings
   http_ip       = var.common_data_source == "http" ? var.common_http_ip : null
@@ -139,17 +140,22 @@ source "vsphere-iso" "linux-fedora" {
   boot_order    = var.vm_boot_order
   boot_wait     = var.vm_boot_wait
   boot_command = [
-    // This sends the "up arrow" key, typically used to navigate through boot menu options.
-    "<up>",
-    // This sends the "e" key. In the GRUB boot loader, this is used to edit the selected boot menu option.
-    "e",
-    // This sends two "down arrow" keys, followed by the "end" key, and then waits. This is used to navigate to a specific line in the boot menu option's configuration.
-    "<down><down><end><wait>",
-    // This types the string "text" followed by the value of the 'data_source_command' local variable.
-    // This is used to modify the boot menu option's configuration to boot in text mode and specify the kickstart data source configured in the common variables.
-    "text ${local.data_source_command}",
-    // This sends the "enter" key, waits, turns on the left control key, sends the "x" key, and then turns off the left control key. This is used to save the changes and exit the boot menu option's configuration, and then continue the boot process.
-    "<enter><wait><leftCtrlOn>x<leftCtrlOff>"
+    // This waits for 3 seconds, sends the "c" key, and then waits for another 3 seconds. In the GRUB boot loader, this is used to enter command line mode.
+    "<wait3s>c<wait3s>",
+    // This types a command to load the Linux kernel from the specified path with the 'autoinstall' option and the value of the 'data_source_command' local variable.
+    // The 'autoinstall' option is used to automate the installation process.
+    // The 'data_source_command' local variable is used to specify the kickstart data source configured in the common variables.
+    "linux /casper/vmlinuz --- autoinstall ${local.data_source_command}",
+    // This sends the "enter" key and then waits. This is typically used to execute the command and give the system time to process it.
+    "<enter><wait>",
+    // This types a command to load the initial RAM disk from the specified path.
+    "initrd /casper/initrd",
+    // This sends the "enter" key and then waits. This is typically used to execute the command and give the system time to process it.
+    "<enter><wait>",
+    // This types the "boot" command. This starts the boot process using the loaded kernel and initial RAM disk.
+    "boot",
+    // This sends the "enter" key. This is typically used to execute the command.
+    "<enter>"
   ]
   ip_wait_timeout   = var.common_ip_wait_timeout
   ip_settle_timeout = var.common_ip_settle_timeout
@@ -199,7 +205,7 @@ source "vsphere-iso" "linux-fedora" {
 //  Defines the builders to run, provisioners, and post-processors.
 
 build {
-  sources = ["source.vsphere-iso.linux-fedora"]
+  sources = ["source.vsphere-iso.linux-ubuntu"]
 
   provisioner "ansible" {
     user                   = var.build_username
@@ -208,8 +214,7 @@ build {
     playbook_file          = "${path.cwd}/ansible/linux-playbook.yml"
     roles_path             = "${path.cwd}/ansible/roles"
     ansible_env_vars = [
-      "ANSIBLE_CONFIG=${path.cwd}/ansible/ansible.cfg",
-      "ANSIBLE_PYTHON_INTERPRETER=/usr/bin/python3"
+      "ANSIBLE_CONFIG=${path.cwd}/ansible/ansible.cfg"
     ]
     extra_arguments = [
       "--extra-vars", "display_skipped_hosts=false",

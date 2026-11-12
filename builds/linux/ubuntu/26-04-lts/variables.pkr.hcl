@@ -4,7 +4,7 @@
 
 /*
     DESCRIPTION:
-    Debian 11 input variables.
+    Ubuntu Server 26.04 LTS build variables.
     Packer Plugin for VMware vSphere: 'vsphere-iso' builder.
 */
 
@@ -122,6 +122,12 @@ variable "vm_guest_os_version" {
 variable "vm_guest_os_type" {
   type        = string
   description = "The guest operating system type, also know as guestid."
+}
+
+variable "vm_guest_os_cloudinit" {
+  type        = bool
+  description = "Enable cloud-init for the guest operating system."
+  default     = false
 }
 
 variable "vm_firmware" {
@@ -330,7 +336,7 @@ variable "common_http_port_max" {
 variable "vm_boot_order" {
   type        = string
   description = "The boot order for virtual machines devices."
-  default     = "-"
+  default     = "disk,cdrom"
 }
 
 variable "vm_boot_wait" {

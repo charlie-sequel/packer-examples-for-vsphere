@@ -76,11 +76,11 @@ Debian-12:
 
 ##############################################################################
 
-Debian-11:
+Ubuntu-Server-26.04-LTS:
     extends: .packer-build
     variables:
-        INPUT_PATH: "$SCRIPT_PATH/builds/linux/debian/11/"
-        BUILD_VARS: "linux-debian-11.pkrvars.hcl"
+        INPUT_PATH: "$SCRIPT_PATH/builds/linux/ubuntu/26-04-lts/"
+        BUILD_VARS: "linux-ubuntu-26-04-lts.pkrvars.hcl"
         EXTRA_VAR_FILES: "-var-file=$CONFIG_PATH/network.pkrvars.hcl -var-file=$CONFIG_PATH/linux-storage.pkrvars.hcl"
 
 ##############################################################################
@@ -126,15 +126,6 @@ Red-Hat-Enterprise-Linux-8:
     variables:
         INPUT_PATH: "$SCRIPT_PATH/builds/linux/rhel/8/"
         BUILD_VARS: "linux-rhel-8.pkrvars.hcl"
-        EXTRA_VAR_FILES: "-var-file=$CONFIG_PATH/network.pkrvars.hcl -var-file=$CONFIG_PATH/linux-storage.pkrvars.hcl -var-file=$CONFIG_PATH/rhsm.pkrvars.hcl"
-
-##############################################################################
-
-Red-Hat-Enterprise-Linux-7:
-    extends: .packer-build
-    variables:
-        INPUT_PATH: "$SCRIPT_PATH/builds/linux/rhel/7/"
-        BUILD_VARS: "linux-rhel-7.pkrvars.hcl"
         EXTRA_VAR_FILES: "-var-file=$CONFIG_PATH/network.pkrvars.hcl -var-file=$CONFIG_PATH/linux-storage.pkrvars.hcl -var-file=$CONFIG_PATH/rhsm.pkrvars.hcl"
 
 ##############################################################################
@@ -238,11 +229,11 @@ CentOS-Stream-9:
 
 ##############################################################################
 
-Fedora-Server-43:
+Fedora-Server-45:
     extends: .packer-build
     variables:
-        INPUT_PATH: "$SCRIPT_PATH/builds/linux/fedora/43/"
-        BUILD_VARS: "linux-fedora-43.pkrvars.hcl"
+        INPUT_PATH: "$SCRIPT_PATH/builds/linux/fedora/45/"
+        BUILD_VARS: "linux-fedora-45.pkrvars.hcl"
         EXTRA_VAR_FILES: "-var-file=$CONFIG_PATH/network.pkrvars.hcl -var-file=$CONFIG_PATH/linux-storage.pkrvars.hcl"
 
 ##############################################################################
@@ -252,7 +243,7 @@ SUSE-Linux-Enterprise-Server-15:
     variables:
         INPUT_PATH: "$SCRIPT_PATH/builds/linux/sles/15/"
         BUILD_VARS: "linux-sles-15.pkrvars.hcl"
-        EXTRA_VAR_FILES: "-var-file=$CONFIG_PATH/scc.pkrvars.hcl"
+        EXTRA_VAR_FILES: "-var-file=$CONFIG_PATH/network.pkrvars.hcl -var-file=$CONFIG_PATH/scc.pkrvars.hcl"
 
 ##############################################################################
 

@@ -11,7 +11,8 @@ The project is tested on the following platforms:
 ::spantable::
 | Platform        | Version                |
 | --------------- | ---------------------- |
-| VMware vSphere  | 9.0 or later           |
+| VMware vSphere  | 9.1                    |
+| VMware vSphere  | 9.0                    |
 | VMware vSphere  | 8.0 Update 3h or later |
 ::end-spantable::
 
@@ -20,36 +21,23 @@ The project is tested on the following platforms:
 The project is tested on the following operating systems for the Packer host [^1] :
 
 ::spantable::
-| Operating System   | Version | Architecture  |
-| :----------------- | :------ | :------------ |
-| VMware Photon OS   | 5.0     | `amd64`       |
-| Ubuntu Server      | 24.04   | `amd64`       |
-| macOS              | Tahoe   | `arm64`       |
+| Operating System   | Version          | Architecture  |
+| :----------------- | :--------------- | :------------ |
+| Ubuntu Server      | 26.04            | `amd64`       |
+| macOS              | 27 (Golden Gate) | `arm64`       |
+| macOS              | 26 (Tahoe)       | `arm64`       |
 ::end-spantable::
 
 ## :simple-packer: &nbsp; Packer
 
 | Component                                                        | Version   | Description      | Resources                                                                                                               |
 | :--------------------------------------------------------------- | :-------- | :--------------- | :---------------------------------------------------------------------------------------------------------------------- |
-| :simple-packer: &nbsp;&nbsp; Packer                              | >= 1.15.0 | By HashiCorp     | [:fontawesome-brands-github:][packer-repo] &nbsp;&nbsp; [:material-library:][packer]                                    |
-| :simple-hashicorp: &nbsp;&nbsp; Packer Plugin for Ansible        | >= 1.1.4  | By HashiCorp     | [:fontawesome-brands-github:][packer-plugin-ansible-repo] &nbsp;&nbsp; [:material-library:][packer-plugin-ansible]      |
-| :simple-hashicorp: &nbsp;&nbsp; Packer Plugin for VMware vSphere | >= 2.1.1  | By Broadcom      | [:fontawesome-brands-github:][packer-plugin-vsphere-repo] &nbsp;&nbsp; [:material-library:][packer-plugin-vsphere-docs] |
-| :fontawesome-brands-git: &nbsp;&nbsp; Packer Plugin for Git      | >= 0.6.5  | Community Plugin | [:fontawesome-brands-github:][packer-plugin-git-repo] &nbsp;&nbsp; [:material-library:][packer-plugin-git-docs]         |
+| :simple-packer: &nbsp;&nbsp; Packer                              | >= 1.16.2 | By HashiCorp     | [:fontawesome-brands-github:][packer-repo] &nbsp;&nbsp; [:material-library:][packer]                                    |
+| :simple-hashicorp: &nbsp;&nbsp; Packer Plugin for Ansible        | >= 1.1.6  | By HashiCorp     | [:fontawesome-brands-github:][packer-plugin-ansible-repo] &nbsp;&nbsp; [:material-library:][packer-plugin-ansible]      |
+| :simple-hashicorp: &nbsp;&nbsp; Packer Plugin for VMware vSphere | >= 2.5.1  | By Broadcom      | [:fontawesome-brands-github:][packer-plugin-vsphere-repo] &nbsp;&nbsp; [:material-library:][packer-plugin-vsphere-docs] |
+| :fontawesome-brands-git: &nbsp;&nbsp; Packer Plugin for Git      | >= 0.6.7  | Community Plugin | [:fontawesome-brands-github:][packer-plugin-git-repo] &nbsp;&nbsp; [:material-library:][packer-plugin-git-docs]         |
 
 ### Installation
-
-=== ":fontawesome-brands-linux: &nbsp; VMware Photon OS"
-
-    You can install Packer on VMware Photon OS using the following commands:
-
-    ```shell
-    export PACKER_VERSION="1.15.0"
-    export OS_PACKAGES="wget unzip"
-
-    tdnf install ${OS_PACKAGES} -y
-    wget -q https://releases.hashicorp.com/packer/${PACKER_VERSION}/packer_${PACKER_VERSION}_linux_amd64.zip
-    unzip -o -d /usr/local/bin/ packer_${PACKER_VERSION}_linux_amd64.zip
-    ```
 
 === ":fontawesome-brands-ubuntu: &nbsp; Ubuntu"
 
@@ -104,39 +92,13 @@ The following additional software packages must be installed on the operating sy
 | Package                                                | Version   | Description                                        | Resources                       |
 | :----------------------------------------------------- |:----------|:---------------------------------------------------| :------------------------------ |
 | :simple-ansible: &nbsp;&nbsp; ansible-core             | >= 2.16   | Automation engine for IT infrastructure            | [:material-library:][ansible]   |
-| :fontawesome-brands-git: &nbsp;&nbsp; git              | >= 2.43.0 | Version control system for tracking changes        | [:material-library:][git]       |
-| :material-code-braces: &nbsp;&nbsp; gomplate           | >= 4.3.0  | Template renderer                                  | [:material-library:][gomplate]  |
-| :simple-json: &nbsp;&nbsp; jq                          | >= 1.8.3  | Command-line JSON parser                           | [:material-library:][jq]        |
-| :simple-terraform: &nbsp;&nbsp; terraform              | >= 1.10.0 | Infrastructure as Code (IaC) tool by HashiCorp     | [:material-library:][terraform] |
+| :fontawesome-brands-git: &nbsp;&nbsp; git              | >= 2.53.0 | Version control system for tracking changes        | [:material-library:][git]       |
+| :material-code-braces: &nbsp;&nbsp; gomplate           | >= 5.3.1  | Template renderer                                  | [:material-library:][gomplate]  |
+| :simple-json: &nbsp;&nbsp; jq                          | —         | Command-line JSON parser                           | [:material-library:][jq]        |
+| :simple-terraform: &nbsp;&nbsp; terraform              | >= 1.16.0 | Infrastructure as Code (IaC) tool by HashiCorp     | [:material-library:][terraform] |
 | :fontawesome-solid-compact-disc: &nbsp;&nbsp; xorriso  | >= 1.5.6  | ISO filesystem images creator for Linux            | [:material-library:][xorriso]   |
 
 ### Installation
-
-=== ":fontawesome-brands-linux: &nbsp; VMware Photon OS"
-
-    Packages:
-
-    ```shell
-    tdnf -y install ansible git jq xorriso wget unzip
-    export PATH="$HOME/.local/bin:$PATH"
-    ```
-
-    Terraform:
-
-    ```shell
-    export TERRAFORM_VERSION="1.10.0"
-    wget -q https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
-    unzip -o -d /usr/local/bin/ terraform_${TERRAFORM_VERSION}_linux_${LINUX_ARCH}.zip
-    ```
-
-    Gomplate
-
-    ```shell
-    export GOMPLATE_VERSION="4.3.0"
-    wget -q https://github.com/hairyhenderson/gomplate/releases/download/v${GOMPLATE_VERSION}/gomplate_linux-amd64
-    chmod +x gomplate_linux-amd64
-    sudo mv gomplate_linux-amd64 /usr/local/bin/gomplate
-    ```
 
 === ":fontawesome-brands-ubuntu: &nbsp; Ubuntu"
 
@@ -153,7 +115,7 @@ The following additional software packages must be installed on the operating sy
     Gomplate:
 
     ```shell
-    export GOMPLATE_VERSION="4.3.0"
+    export GOMPLATE_VERSION="5.3.1"
     wget -q https://github.com/hairyhenderson/gomplate/releases/download/v${GOMPLATE_VERSION}/gomplate_linux-amd64
     chmod +x gomplate_linux-amd64
     sudo mv gomplate_linux-amd64 /usr/local/bin/gomplate
