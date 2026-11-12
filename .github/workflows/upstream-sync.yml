@@ -60,7 +60,7 @@ jobs:
               -f base=main \
               -f head=automated/upstream-sync \
               -f title="Sync upstream: vmware/packer-examples-for-vsphere@develop" \
-              -f body="Automated upstream sync (${{ steps.fetch.outputs.count }}d merge; resolve conflicts if GitHub flags them." \
+              -f body="Automated upstream sync (${{ steps.fetch.outputs.count }} new commit(s)). Review and merge; resolve conflicts if GitHub flags them." \
               --jq '"Opened " + .html_url'
           else
             echo "PR #$open_pr already open; branch refreshed."
