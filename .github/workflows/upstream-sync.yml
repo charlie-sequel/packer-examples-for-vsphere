@@ -8,7 +8,8 @@ name: Upstream sync
 #
 # Uses the UPSTREAM_SYNC_TOKEN secret (a personal access token with Workflows
 # write access) because the built-in GITHUB_TOKEN can't push upstream changes
-# to files under .github/workflows/.
+# to files under .github/workflows/. The PR is created via the REST API because
+# GraphQL's createPullRequest rejects fine-grained tokens.
 
 on:
   schedule:
@@ -53,12 +54,14 @@ jobs:
           sha="$(git rev-parse upstream/develop)"
           git push -f origin "$sha:refs/heads/automated/upstream-sync"
 
-          if [ -z "$(gh pr list --head automated/upstream-sync --state open --json number -q '.[0].number')" ]; then
-            gh pr create \
-              --base main \
-              --head automated/upstream-sync \
-              --title "Sync upstream: vmware/packer-examples-for-vsphere@develop" \
-              --body "Automated upstream sync (${{ steps.fetch.outputs.count }} new commit(s)). Review and merge; resolve conflicts if GitHub flags them."
+          open_pr="$(gh api "repos/${{ github.repository }}/pulls?head=${{ github.repository_owner }}:automated/upstream-sync&state=open" --jq '.[0].number // empty')"
+          if [ -z "$open_pr" ]; then
+            gh api "repos/${{ github.repository }}/pulls" \
+              -f base=main \
+              -f head=automated/upstream-sync \
+              -f title="Sync upstream: vmware/packer-examples-for-vsphere@develop" \
+              -f body="Automated upstream sync (${{ steps.fetch.outputs.count }}d merge; resolve conflicts if GitHub flags them." \
+              --jq '"Opened " + .html_url'
           else
-            echo "PR already open; branch refreshed."
+            echo "PR #$open_pr already open; branch refreshed."
           fi
